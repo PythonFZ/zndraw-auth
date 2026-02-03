@@ -204,6 +204,7 @@ Settings are loaded from environment variables with the `ZNDRAW_AUTH_` prefix:
 | `ZNDRAW_AUTH_DATABASE_URL` | `sqlite+aiosqlite:///./zndraw_auth.db` | Database connection URL |
 | `ZNDRAW_AUTH_RESET_PASSWORD_TOKEN_SECRET` | `CHANGE-ME-RESET` | Password reset token secret |
 | `ZNDRAW_AUTH_VERIFICATION_TOKEN_SECRET` | `CHANGE-ME-VERIFY` | Email verification token secret |
+| `ZNDRAW_AUTH_DEFAULT_SUPERUSER` | `false` | When `true`, newly registered users are automatically granted superuser privileges |
 
 ## Exports
 

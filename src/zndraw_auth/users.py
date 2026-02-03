@@ -28,6 +28,7 @@ from fastapi_users.authentication import (
 from fastapi_users.db import SQLAlchemyUserDatabase
 
 from zndraw_auth.db import User, get_user_db
+from zndraw_auth.schemas import UserUpdate
 from zndraw_auth.settings import AuthSettings, get_auth_settings
 
 # --- User Manager ---
@@ -41,12 +42,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     reset_password_token_secret: str
     verification_token_secret: str
+    default_superuser: bool = False
 
     async def on_after_register(
         self, user: User, request: Request | None = None
     ) -> None:
         """Called after successful registration."""
-        print(f"User {user.id} has registered.")
+        if self.default_superuser and not user.is_superuser:
+            await self.update(UserUpdate(is_superuser=True), user, safe=False)
+            print(f"User {user.id} has registered (granted superuser).")
+        else:
+            print(f"User {user.id} has registered.")
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Request | None = None
@@ -73,6 +79,7 @@ async def get_user_manager(
     manager.verification_token_secret = (
         settings.verification_token_secret.get_secret_value()
     )
+    manager.default_superuser = settings.default_superuser
     yield manager
 
 

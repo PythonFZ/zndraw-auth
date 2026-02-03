@@ -1,5 +1,6 @@
 """Test fixtures for zndraw-auth."""
 
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 import pytest
@@ -37,7 +38,19 @@ def test_settings() -> AuthSettings:
 
 
 @pytest.fixture
-async def app(test_settings: AuthSettings) -> FastAPI:
+def test_settings_default_superuser() -> AuthSettings:
+    """Settings with default_superuser=True."""
+    return AuthSettings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        reset_password_token_secret="test-reset-secret",
+        verification_token_secret="test-verify-secret",
+        default_superuser=True,
+    )
+
+
+@pytest.fixture
+async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
     """Create test FastAPI app with dependency overrides."""
     app = FastAPI()
 
@@ -107,10 +120,70 @@ async def app(test_settings: AuthSettings) -> FastAPI:
 
 
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncClient:
+async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     """Async test client."""
     async with AsyncClient(
         transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+async def app_default_superuser(
+    test_settings_default_superuser: AuthSettings,
+) -> AsyncGenerator[FastAPI, None]:
+    """Create test FastAPI app with default_superuser=True."""
+    app = FastAPI()
+
+    # Override settings dependency to use test settings
+    settings = test_settings_default_superuser
+    app.dependency_overrides[get_auth_settings] = lambda: settings
+
+    # Create tables for this test's database
+    await create_db_and_tables(test_settings_default_superuser)
+
+    # Include auth routers
+    app.include_router(
+        fastapi_users.get_auth_router(auth_backend),
+        prefix="/auth/jwt",
+        tags=["auth"],
+    )
+    app.include_router(
+        fastapi_users.get_register_router(UserRead, UserCreate),
+        prefix="/auth",
+        tags=["auth"],
+    )
+
+    # Test route for superuser check
+    @app.get("/test/superuser")
+    async def superuser_route(
+        user: Annotated[User, Depends(current_superuser)],
+    ) -> dict[str, str]:
+        """Route requiring superuser."""
+        return {"user_id": str(user.id), "is_superuser": str(user.is_superuser)}
+
+    yield app
+
+    # Cleanup: drop all tables and clear caches
+    engine = get_engine(test_settings_default_superuser.database_url)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+    # Clear lru_cache to ensure fresh engine/session for next test
+    get_engine.cache_clear()
+    from zndraw_auth.db import get_session_maker
+
+    get_session_maker.cache_clear()
+
+
+@pytest.fixture
+async def client_default_superuser(
+    app_default_superuser: FastAPI,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Async test client with default_superuser=True."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app_default_superuser),
         base_url="http://test",
     ) as client:
         yield client

@@ -22,7 +22,7 @@ class TokenResponse(BaseModel):
 
 
 @pytest.mark.asyncio
-async def test_register_user(client: AsyncClient):
+async def test_register_user(client: AsyncClient) -> None:
     """Test user registration."""
     user_data = UserCreate(email="test@example.com", password="testpassword123")
     response = await client.post(
@@ -38,7 +38,7 @@ async def test_register_user(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_login_user(client: AsyncClient):
+async def test_login_user(client: AsyncClient) -> None:
     """Test user login."""
     # Register first
     user_data = UserCreate(email="login@example.com", password="testpassword123")
@@ -54,7 +54,7 @@ async def test_login_user(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_login_invalid_credentials(client: AsyncClient):
+async def test_login_invalid_credentials(client: AsyncClient) -> None:
     """Test login with wrong password."""
     # Register
     user_data = UserCreate(email="wrong@example.com", password="correctpassword")
@@ -67,7 +67,7 @@ async def test_login_invalid_credentials(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email(client: AsyncClient):
+async def test_register_duplicate_email(client: AsyncClient) -> None:
     """Test registering with existing email."""
     # Register first user
     user_data = UserCreate(email="dupe@example.com", password="password123")
@@ -95,7 +95,7 @@ async def _get_auth_header(
 
 
 @pytest.mark.asyncio
-async def test_current_active_user_dependency(client: AsyncClient):
+async def test_current_active_user_dependency(client: AsyncClient) -> None:
     """Test current_active_user dependency injection."""
     headers = await _get_auth_header(client, "active@example.com", "password123")
 
@@ -107,14 +107,14 @@ async def test_current_active_user_dependency(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_current_active_user_unauthorized(client: AsyncClient):
+async def test_current_active_user_unauthorized(client: AsyncClient) -> None:
     """Test current_active_user rejects unauthenticated requests."""
     response = await client.get("/test/protected")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_current_superuser_forbidden(client: AsyncClient):
+async def test_current_superuser_forbidden(client: AsyncClient) -> None:
     """Test current_superuser rejects non-superusers."""
     headers = await _get_auth_header(client, "regular@example.com", "password123")
 
@@ -123,7 +123,7 @@ async def test_current_superuser_forbidden(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_current_optional_user_authenticated(client: AsyncClient):
+async def test_current_optional_user_authenticated(client: AsyncClient) -> None:
     """Test current_optional_user with authenticated user."""
     headers = await _get_auth_header(client, "optional@example.com", "password123")
 
@@ -135,7 +135,7 @@ async def test_current_optional_user_authenticated(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_current_optional_user_anonymous(client: AsyncClient):
+async def test_current_optional_user_anonymous(client: AsyncClient) -> None:
     """Test current_optional_user without authentication."""
     response = await client.get("/test/optional")
     assert response.status_code == 200
@@ -145,9 +145,39 @@ async def test_current_optional_user_anonymous(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_get_async_session_dependency(client: AsyncClient):
+async def test_get_async_session_dependency(client: AsyncClient) -> None:
     """Test get_async_session dependency injection."""
     response = await client.get("/test/session")
     assert response.status_code == 200
     data = response.json()
     assert data["db_check"] == "1"
+
+
+# --- Tests for default_superuser setting ---
+
+
+@pytest.mark.asyncio
+async def test_default_superuser_setting(client_default_superuser: AsyncClient) -> None:
+    """Test that users are superusers when ZNDRAW_AUTH_DEFAULT_SUPERUSER=true."""
+    # Register a user
+    user_data = UserCreate(email="superadmin@example.com", password="password123")
+    response = await client_default_superuser.post(
+        "/auth/register",
+        json=user_data.model_dump(),
+    )
+    assert response.status_code == 201
+    user = UserRead.model_validate(response.json())
+    assert user.is_superuser is True
+
+    # Login and verify we can access superuser-protected route
+    login_form = LoginForm(username=user_data.email, password="password123")
+    response = await client_default_superuser.post(
+        "/auth/jwt/login", data=login_form.model_dump()
+    )
+    token = TokenResponse.model_validate(response.json())
+    headers = {"Authorization": f"Bearer {token.access_token}"}
+
+    response = await client_default_superuser.get("/test/superuser", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_superuser"] == "True"

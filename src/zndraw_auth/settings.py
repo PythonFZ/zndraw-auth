@@ -30,6 +30,10 @@ class AuthSettings(BaseSettings):
     reset_password_token_secret: SecretStr = SecretStr("CHANGE-ME-RESET")
     verification_token_secret: SecretStr = SecretStr("CHANGE-ME-VERIFY")
 
+    # User defaults
+    default_superuser: bool = False
+    """When True, new users are automatically granted superuser privileges."""
+
 
 @lru_cache
 def get_auth_settings() -> AuthSettings:
