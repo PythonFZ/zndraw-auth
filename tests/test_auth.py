@@ -2,8 +2,23 @@
 
 import pytest
 from httpx import AsyncClient
+from pydantic import BaseModel
 
 from zndraw_auth import UserCreate, UserRead
+
+
+class LoginForm(BaseModel):
+    """OAuth2 password login form data."""
+
+    username: str  # email in our case
+    password: str
+
+
+class TokenResponse(BaseModel):
+    """OAuth2 bearer token response."""
+
+    access_token: str
+    token_type: str
 
 
 @pytest.mark.asyncio
@@ -30,14 +45,12 @@ async def test_login_user(client: AsyncClient):
     await client.post("/auth/register", json=user_data.model_dump())
 
     # Login
-    response = await client.post(
-        "/auth/jwt/login",
-        data={"username": user_data.email, "password": "testpassword123"},
-    )
+    login_form = LoginForm(username=user_data.email, password="testpassword123")
+    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
     assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
+    token = TokenResponse.model_validate(response.json())
+    assert token.access_token
+    assert token.token_type == "bearer"
 
 
 @pytest.mark.asyncio
@@ -48,10 +61,8 @@ async def test_login_invalid_credentials(client: AsyncClient):
     await client.post("/auth/register", json=user_data.model_dump())
 
     # Login with wrong password
-    response = await client.post(
-        "/auth/jwt/login",
-        data={"username": user_data.email, "password": "wrongpassword"},
-    )
+    login_form = LoginForm(username=user_data.email, password="wrongpassword")
+    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
     assert response.status_code == 400
 
 
@@ -77,12 +88,10 @@ async def _get_auth_header(
     """Helper to register, login, and return auth header."""
     user_data = UserCreate(email=email, password=password)
     await client.post("/auth/register", json=user_data.model_dump())
-    response = await client.post(
-        "/auth/jwt/login",
-        data={"username": email, "password": password},
-    )
-    token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    login_form = LoginForm(username=email, password=password)
+    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
+    token = TokenResponse.model_validate(response.json())
+    return {"Authorization": f"Bearer {token.access_token}"}
 
 
 @pytest.mark.asyncio
