@@ -229,6 +229,10 @@ from zndraw_auth import (
     AuthSettings,
     get_auth_settings,
 
+    # User manager (for custom lifecycle hooks)
+    UserManager,
+    get_user_manager,
+
     # FastAPIUsers instance (for including routers)
     fastapi_users,
     auth_backend,
