@@ -2,6 +2,7 @@
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from functools import lru_cache
 
 
 class AuthSettings(BaseSettings):
@@ -29,7 +30,6 @@ class AuthSettings(BaseSettings):
     verification_token_secret: SecretStr = SecretStr("CHANGE-ME-VERIFY")
 
 
-from functools import lru_cache
 
 @lru_cache
 def get_auth_settings() -> AuthSettings:
