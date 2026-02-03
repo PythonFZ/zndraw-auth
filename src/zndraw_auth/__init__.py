@@ -26,6 +26,7 @@ Example usage:
 """
 
 from zndraw_auth.db import (
+    Base,
     User,
     create_db_and_tables,
     get_async_session,
@@ -44,6 +45,8 @@ from zndraw_auth.users import (
 )
 
 __all__ = [
+    # SQLAlchemy Base (for extending with your own models)
+    "Base",
     # User model
     "User",
     # Database
