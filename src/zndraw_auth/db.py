@@ -1,5 +1,6 @@
 """Database models and session management."""
 
+import uuid
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Annotated
@@ -74,6 +75,6 @@ async def get_async_session(
 
 async def get_user_db(
     session: Annotated[AsyncSession, Depends(get_async_session)],
-) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
+) -> AsyncGenerator[SQLAlchemyUserDatabase[User, uuid.UUID], None]:
     """FastAPI dependency that yields the user database adapter."""
-    yield SQLAlchemyUserDatabase(session, User)
+    yield SQLAlchemyUserDatabase[User, uuid.UUID](session, User)

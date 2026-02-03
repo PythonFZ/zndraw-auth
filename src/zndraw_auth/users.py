@@ -15,6 +15,7 @@ Example usage in other packages:
 """
 
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -28,7 +29,6 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 
 from zndraw_auth.db import User, get_user_db
 from zndraw_auth.settings import AuthSettings, get_auth_settings
-
 
 # --- User Manager ---
 
@@ -62,13 +62,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
 
 async def get_user_manager(
-    user_db: Annotated[SQLAlchemyUserDatabase, Depends(get_user_db)],
+    user_db: Annotated[SQLAlchemyUserDatabase[User, uuid.UUID], Depends(get_user_db)],
     settings: Annotated[AuthSettings, Depends(get_auth_settings)],
-) -> UserManager:
+) -> AsyncGenerator[UserManager, None]:
     """FastAPI dependency that yields the user manager."""
     manager = UserManager(user_db)
-    manager.reset_password_token_secret = settings.reset_password_token_secret.get_secret_value()
-    manager.verification_token_secret = settings.verification_token_secret.get_secret_value()
+    manager.reset_password_token_secret = (
+        settings.reset_password_token_secret.get_secret_value()
+    )
+    manager.verification_token_secret = (
+        settings.verification_token_secret.get_secret_value()
+    )
     yield manager
 
 
@@ -80,7 +84,7 @@ bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
 
 def get_jwt_strategy(
     settings: Annotated[AuthSettings, Depends(get_auth_settings)],
-) -> JWTStrategy:
+) -> JWTStrategy[User, uuid.UUID]:
     """Get JWT strategy with settings."""
     return JWTStrategy(
         secret=settings.secret_key.get_secret_value(),

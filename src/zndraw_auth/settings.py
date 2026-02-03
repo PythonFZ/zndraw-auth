@@ -1,8 +1,9 @@
 """Configuration settings for zndraw-auth."""
 
+from functools import lru_cache
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
 
 
 class AuthSettings(BaseSettings):
@@ -28,7 +29,6 @@ class AuthSettings(BaseSettings):
     # Password reset / verification tokens
     reset_password_token_secret: SecretStr = SecretStr("CHANGE-ME-RESET")
     verification_token_secret: SecretStr = SecretStr("CHANGE-ME-VERIFY")
-
 
 
 @lru_cache

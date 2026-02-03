@@ -60,6 +60,7 @@ async def app(test_settings: AuthSettings) -> FastAPI:
     # Clear lru_cache to ensure fresh engine/session for next test
     get_engine.cache_clear()
     from zndraw_auth.db import get_session_maker
+
     get_session_maker.cache_clear()
 
 

@@ -17,11 +17,13 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "httpx>=0.27.0",
+    "ruff>=0.8.0",
+    "mypy>=1.0.0",
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.9.28,<0.10.0"]
+build-backend = "uv_build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/zndraw_auth"]
@@ -29,3 +31,51 @@ packages = ["src/zndraw_auth"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "I",      # isort
+    "C4",     # flake8-comprehensions
+    "RUF",    # Ruff-specific rules
+    "TC",     # flake8-type-checking
+    "ASYNC",  # flake8-async
+    "PTH",    # flake8-use-pathlib
+    "RET",    # flake8-return
+    "ARG",    # flake8-unused-arguments
+    "PL",     # Pylint
+    "PERF",   # Perflint
+]
+ignore = [
+    "ARG001",  # Unused function argument (common in FastAPI dependencies)
+    "ARG002",  # Unused method argument (required by base class interface)
+    "PLR0913", # Too many arguments (FastAPI routes often have many deps)
+    "RUF022",  # __all__ not sorted (we prefer logical grouping)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["zndraw_auth"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "PLR2004", "PLC0415"]  # Allow magic values, unused args, late imports in tests
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["fastapi_users.*"]
+ignore_missing_imports = true
