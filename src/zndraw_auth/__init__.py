@@ -1,0 +1,71 @@
+"""ZnDraw Auth - Shared authentication for ZnDraw ecosystem.
+
+Example usage:
+    from zndraw_auth import (
+        current_active_user,
+        current_superuser,
+        fastapi_users,
+        auth_backend,
+        get_async_session,
+        create_db_and_tables,
+        User,
+        UserRead,
+        UserCreate,
+    )
+
+    # In your FastAPI app:
+    app.include_router(
+        fastapi_users.get_auth_router(auth_backend),
+        prefix="/auth/jwt",
+        tags=["auth"],
+    )
+
+    @app.get("/protected")
+    async def protected(user: User = Depends(current_active_user)):
+        return {"user_id": str(user.id)}
+"""
+
+from zndraw_auth.db import (
+    User,
+    create_db_and_tables,
+    get_async_session,
+    get_user_db,
+)
+from zndraw_auth.schemas import UserCreate, UserRead, UserUpdate
+from zndraw_auth.settings import AuthSettings, get_auth_settings
+from zndraw_auth.users import (
+    UserManager,
+    auth_backend,
+    current_active_user,
+    current_optional_user,
+    current_superuser,
+    fastapi_users,
+    get_user_manager,
+)
+
+__all__ = [
+    # User model
+    "User",
+    # Database
+    "create_db_and_tables",
+    "get_async_session",
+    "get_user_db",
+    # Schemas
+    "UserCreate",
+    "UserRead",
+    "UserUpdate",
+    # Settings
+    "AuthSettings",
+    "get_auth_settings",
+    # User manager
+    "UserManager",
+    "get_user_manager",
+    # Auth backend
+    "auth_backend",
+    # FastAPIUsers instance
+    "fastapi_users",
+    # Dependencies for Depends()
+    "current_active_user",
+    "current_superuser",
+    "current_optional_user",
+]
