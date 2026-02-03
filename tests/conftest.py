@@ -28,24 +28,27 @@ from zndraw_auth.settings import AuthSettings
 
 @pytest.fixture
 def test_settings() -> AuthSettings:
-    """Settings with in-memory database."""
+    """Settings with in-memory database (production mode with admin configured)."""
     return AuthSettings(
         database_url="sqlite+aiosqlite:///:memory:",
         secret_key="test-secret-key",
         reset_password_token_secret="test-reset-secret",
         verification_token_secret="test-verify-secret",
+        # Production mode: admin configured, new users are NOT superusers
+        default_admin_email="admin@test.com",
+        default_admin_password="admin-password",
     )
 
 
 @pytest.fixture
-def test_settings_default_superuser() -> AuthSettings:
-    """Settings with default_superuser=True."""
+def test_settings_dev_mode() -> AuthSettings:
+    """Settings in dev mode (no admin configured, all users become superusers)."""
     return AuthSettings(
         database_url="sqlite+aiosqlite:///:memory:",
         secret_key="test-secret-key",
         reset_password_token_secret="test-reset-secret",
         verification_token_secret="test-verify-secret",
-        default_superuser=True,
+        # Dev mode: no admin configured
     )
 
 
@@ -130,18 +133,18 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
-async def app_default_superuser(
-    test_settings_default_superuser: AuthSettings,
+async def app_dev_mode(
+    test_settings_dev_mode: AuthSettings,
 ) -> AsyncGenerator[FastAPI, None]:
-    """Create test FastAPI app with default_superuser=True."""
+    """Create test FastAPI app in dev mode (all users become superusers)."""
     app = FastAPI()
 
     # Override settings dependency to use test settings
-    settings = test_settings_default_superuser
+    settings = test_settings_dev_mode
     app.dependency_overrides[get_auth_settings] = lambda: settings
 
     # Create tables for this test's database
-    await create_db_and_tables(test_settings_default_superuser)
+    await create_db_and_tables(test_settings_dev_mode)
 
     # Include auth routers
     app.include_router(
@@ -166,7 +169,7 @@ async def app_default_superuser(
     yield app
 
     # Cleanup: drop all tables and clear caches
-    engine = get_engine(test_settings_default_superuser.database_url)
+    engine = get_engine(test_settings_dev_mode.database_url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
@@ -178,12 +181,12 @@ async def app_default_superuser(
 
 
 @pytest.fixture
-async def client_default_superuser(
-    app_default_superuser: FastAPI,
+async def client_dev_mode(
+    app_dev_mode: FastAPI,
 ) -> AsyncGenerator[AsyncClient, None]:
-    """Async test client with default_superuser=True."""
+    """Async test client in dev mode (all users become superusers)."""
     async with AsyncClient(
-        transport=ASGITransport(app=app_default_superuser),
+        transport=ASGITransport(app=app_dev_mode),
         base_url="http://test",
     ) as client:
         yield client

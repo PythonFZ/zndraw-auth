@@ -153,15 +153,33 @@ async def test_get_async_session_dependency(client: AsyncClient) -> None:
     assert data["db_check"] == "1"
 
 
-# --- Tests for default_superuser setting ---
+# --- Tests for dev mode and default admin ---
 
 
 @pytest.mark.asyncio
-async def test_default_superuser_setting(client_default_superuser: AsyncClient) -> None:
-    """Test that users are superusers when ZNDRAW_AUTH_DEFAULT_SUPERUSER=true."""
+async def test_default_admin_created_on_startup(client: AsyncClient) -> None:
+    """Test that default admin is created on startup when configured."""
+    # The test_settings fixture has default_admin_email="admin@test.com"
+    # This admin should have been created during create_db_and_tables()
+    login_form = LoginForm(username="admin@test.com", password="admin-password")
+    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
+    assert response.status_code == 200
+    token = TokenResponse.model_validate(response.json())
+
+    # Verify admin can access superuser route
+    headers = {"Authorization": f"Bearer {token.access_token}"}
+    response = await client.get("/test/superuser", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_superuser"] == "True"
+
+
+@pytest.mark.asyncio
+async def test_dev_mode_all_users_superuser(client_dev_mode: AsyncClient) -> None:
+    """Test that users are superusers in dev mode (no admin configured)."""
     # Register a user
-    user_data = UserCreate(email="superadmin@example.com", password="password123")
-    response = await client_default_superuser.post(
+    user_data = UserCreate(email="devuser@example.com", password="password123")
+    response = await client_dev_mode.post(
         "/auth/register",
         json=user_data.model_dump(),
     )
@@ -171,13 +189,13 @@ async def test_default_superuser_setting(client_default_superuser: AsyncClient) 
 
     # Login and verify we can access superuser-protected route
     login_form = LoginForm(username=user_data.email, password="password123")
-    response = await client_default_superuser.post(
+    response = await client_dev_mode.post(
         "/auth/jwt/login", data=login_form.model_dump()
     )
     token = TokenResponse.model_validate(response.json())
     headers = {"Authorization": f"Bearer {token.access_token}"}
 
-    response = await client_default_superuser.get("/test/superuser", headers=headers)
+    response = await client_dev_mode.get("/test/superuser", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["is_superuser"] == "True"

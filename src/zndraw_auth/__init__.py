@@ -29,6 +29,7 @@ from zndraw_auth.db import (
     Base,
     User,
     create_db_and_tables,
+    ensure_default_admin,
     get_async_session,
     get_user_db,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "User",
     # Database
     "create_db_and_tables",
+    "ensure_default_admin",
     "get_async_session",
     "get_user_db",
     # Schemas

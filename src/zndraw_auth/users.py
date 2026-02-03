@@ -42,15 +42,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     reset_password_token_secret: str
     verification_token_secret: str
-    default_superuser: bool = False
+    is_dev_mode: bool = False
 
     async def on_after_register(
         self, user: User, request: Request | None = None
     ) -> None:
         """Called after successful registration."""
-        if self.default_superuser and not user.is_superuser:
+        if self.is_dev_mode and not user.is_superuser:
             await self.update(UserUpdate(is_superuser=True), user, safe=False)
-            print(f"User {user.id} has registered (granted superuser).")
+            print(f"User {user.id} has registered (granted superuser - dev mode).")
         else:
             print(f"User {user.id} has registered.")
 
@@ -79,7 +79,7 @@ async def get_user_manager(
     manager.verification_token_secret = (
         settings.verification_token_secret.get_secret_value()
     )
-    manager.default_superuser = settings.default_superuser
+    manager.is_dev_mode = settings.is_dev_mode
     yield manager
 
 

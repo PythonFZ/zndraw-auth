@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +11,13 @@ class AuthSettings(BaseSettings):
 
     All settings can be overridden with ZNDRAW_AUTH_ prefix.
     Example: ZNDRAW_AUTH_SECRET_KEY=your-secret-key
+
+    Admin mode vs Dev mode:
+    - If DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASSWORD are set, the system
+      runs in "production mode": only the configured admin is a superuser,
+      and new users are created as regular users.
+    - If they are NOT set, the system runs in "dev mode": all newly
+      registered users are automatically granted superuser privileges.
     """
 
     model_config = SettingsConfigDict(
@@ -30,9 +37,18 @@ class AuthSettings(BaseSettings):
     reset_password_token_secret: SecretStr = SecretStr("CHANGE-ME-RESET")
     verification_token_secret: SecretStr = SecretStr("CHANGE-ME-VERIFY")
 
-    # User defaults
-    default_superuser: bool = False
-    """When True, new users are automatically granted superuser privileges."""
+    # Default admin user (production mode)
+    default_admin_email: str | None = None
+    """Email for the default admin user. If set, enables production mode."""
+
+    default_admin_password: SecretStr | None = None
+    """Password for the default admin user."""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_dev_mode(self) -> bool:
+        """True if no admin credentials configured (all users become superusers)."""
+        return self.default_admin_email is None
 
 
 @lru_cache

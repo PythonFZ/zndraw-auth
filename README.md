@@ -204,7 +204,27 @@ Settings are loaded from environment variables with the `ZNDRAW_AUTH_` prefix:
 | `ZNDRAW_AUTH_DATABASE_URL` | `sqlite+aiosqlite:///./zndraw_auth.db` | Database connection URL |
 | `ZNDRAW_AUTH_RESET_PASSWORD_TOKEN_SECRET` | `CHANGE-ME-RESET` | Password reset token secret |
 | `ZNDRAW_AUTH_VERIFICATION_TOKEN_SECRET` | `CHANGE-ME-VERIFY` | Email verification token secret |
-| `ZNDRAW_AUTH_DEFAULT_SUPERUSER` | `false` | When `true`, newly registered users are automatically granted superuser privileges |
+| `ZNDRAW_AUTH_DEFAULT_ADMIN_EMAIL` | `None` | Email for the default admin user |
+| `ZNDRAW_AUTH_DEFAULT_ADMIN_PASSWORD` | `None` | Password for the default admin user |
+
+### Dev Mode vs Production Mode
+
+The system has two operating modes based on admin configuration:
+
+**Dev Mode** (default - no admin configured):
+- All newly registered users are automatically granted superuser privileges
+- Useful for development and testing
+
+**Production Mode** (admin configured):
+- Set `ZNDRAW_AUTH_DEFAULT_ADMIN_EMAIL` and `ZNDRAW_AUTH_DEFAULT_ADMIN_PASSWORD`
+- The configured admin user is created/promoted on startup
+- New users are created as regular users (not superusers)
+
+```bash
+# Production mode example
+export ZNDRAW_AUTH_DEFAULT_ADMIN_EMAIL=admin@example.com
+export ZNDRAW_AUTH_DEFAULT_ADMIN_PASSWORD=secure-password
+```
 
 ## Exports
 
