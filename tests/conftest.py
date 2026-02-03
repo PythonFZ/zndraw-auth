@@ -1,15 +1,24 @@
 """Test fixtures for zndraw-auth."""
 
+from typing import Annotated
+
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from zndraw_auth import (
+    User,
     UserCreate,
     UserRead,
     auth_backend,
     create_db_and_tables,
+    current_active_user,
+    current_optional_user,
+    current_superuser,
     fastapi_users,
+    get_async_session,
     get_auth_settings,
 )
 from zndraw_auth.db import Base, get_engine
@@ -49,6 +58,39 @@ async def app(test_settings: AuthSettings) -> FastAPI:
         prefix="/auth",
         tags=["auth"],
     )
+
+    # Test routes for dependency injection
+    @app.get("/test/protected")
+    async def protected_route(
+        user: Annotated[User, Depends(current_active_user)],
+    ) -> dict[str, str]:
+        """Route requiring authenticated active user."""
+        return {"user_id": str(user.id), "email": user.email}
+
+    @app.get("/test/superuser")
+    async def superuser_route(
+        user: Annotated[User, Depends(current_superuser)],
+    ) -> dict[str, str]:
+        """Route requiring superuser."""
+        return {"user_id": str(user.id), "is_superuser": str(user.is_superuser)}
+
+    @app.get("/test/optional")
+    async def optional_auth_route(
+        user: Annotated[User | None, Depends(current_optional_user)],
+    ) -> dict[str, str | None]:
+        """Route with optional authentication."""
+        if user:
+            return {"user_id": str(user.id), "authenticated": "true"}
+        return {"user_id": None, "authenticated": "false"}
+
+    @app.get("/test/session")
+    async def session_route(
+        session: Annotated[AsyncSession, Depends(get_async_session)],
+    ) -> dict[str, str]:
+        """Route using async session dependency."""
+        result = await session.execute(text("SELECT 1"))
+        value = result.scalar()
+        return {"db_check": str(value)}
 
     yield app
 
