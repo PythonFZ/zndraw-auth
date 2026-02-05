@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlmodel import SQLModel
 
 from zndraw_auth.settings import AuthSettings, get_auth_settings
 
@@ -24,9 +25,9 @@ log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
-    """SQLAlchemy declarative base."""
+    """SQLAlchemy declarative base, sharing metadata with SQLModel."""
 
-    pass
+    metadata = SQLModel.metadata
 
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
