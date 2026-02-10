@@ -31,7 +31,7 @@ class AuthSettings(BaseSettings):
     token_lifetime_seconds: int = 3600  # 1 hour
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///./zndraw_auth.db"
+    database_url: str = "sqlite+aiosqlite://"  # In-memory by default
 
     # Password reset / verification tokens
     reset_password_token_secret: SecretStr = SecretStr("CHANGE-ME-RESET")

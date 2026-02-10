@@ -282,11 +282,23 @@ Settings are loaded from environment variables with the `ZNDRAW_AUTH_` prefix:
 |----------|---------|-------------|
 | `ZNDRAW_AUTH_SECRET_KEY` | `CHANGE-ME-IN-PRODUCTION` | JWT signing secret |
 | `ZNDRAW_AUTH_TOKEN_LIFETIME_SECONDS` | `3600` | JWT token lifetime |
-| `ZNDRAW_AUTH_DATABASE_URL` | `sqlite+aiosqlite:///./zndraw_auth.db` | Database connection URL |
+| `ZNDRAW_AUTH_DATABASE_URL` | `sqlite+aiosqlite://` | Database connection URL (in-memory by default) |
 | `ZNDRAW_AUTH_RESET_PASSWORD_TOKEN_SECRET` | `CHANGE-ME-RESET` | Password reset token secret |
 | `ZNDRAW_AUTH_VERIFICATION_TOKEN_SECRET` | `CHANGE-ME-VERIFY` | Email verification token secret |
 | `ZNDRAW_AUTH_DEFAULT_ADMIN_EMAIL` | `None` | Email for the default admin user |
 | `ZNDRAW_AUTH_DEFAULT_ADMIN_PASSWORD` | `None` | Password for the default admin user |
+
+### Database Persistence
+
+By default, the database is in-memory (data lost on restart). For production or persistent storage:
+
+```bash
+# File-based SQLite
+export ZNDRAW_AUTH_DATABASE_URL="sqlite+aiosqlite:///./zndraw_auth.db"
+
+# PostgreSQL
+export ZNDRAW_AUTH_DATABASE_URL="postgresql+asyncpg://user:pass@localhost/dbname"
+```
 
 ### Dev Mode vs Production Mode
 
