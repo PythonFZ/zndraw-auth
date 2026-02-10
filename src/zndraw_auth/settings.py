@@ -1,7 +1,8 @@
 """Configuration settings for zndraw-auth."""
 
-from functools import lru_cache
+from typing import Annotated
 
+from fastapi import Depends, Request
 from pydantic import SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -48,6 +49,9 @@ class AuthSettings(BaseSettings):
         return self.default_admin_email is None
 
 
-@lru_cache
-def get_auth_settings() -> AuthSettings:
-    return AuthSettings()
+def get_auth_settings(request: Request) -> AuthSettings:
+    """Retrieve auth settings from app.state."""
+    return request.app.state.auth_settings
+
+
+AuthSettingsDep = Annotated[AuthSettings, Depends(get_auth_settings)]

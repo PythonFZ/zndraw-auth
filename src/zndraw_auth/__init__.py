@@ -7,7 +7,6 @@ Example usage:
         fastapi_users,
         auth_backend,
         get_session,
-        database_lifespan,
         User,
         UserRead,
         UserCreate,
@@ -30,7 +29,6 @@ from zndraw_auth.db import (
     SessionDep,
     User,
     create_engine_for_url,
-    database_lifespan,
     ensure_default_admin,
     get_engine,
     get_session,
@@ -38,7 +36,7 @@ from zndraw_auth.db import (
     get_user_db,
 )
 from zndraw_auth.schemas import TokenResponse, UserCreate, UserRead, UserUpdate
-from zndraw_auth.settings import AuthSettings, get_auth_settings
+from zndraw_auth.settings import AuthSettings, AuthSettingsDep, get_auth_settings
 from zndraw_auth.users import (
     UserManager,
     auth_backend,
@@ -54,8 +52,6 @@ __all__ = [
     "Base",
     # User model
     "User",
-    # Database lifecycle
-    "database_lifespan",
     # Database dependencies
     "get_engine",
     "get_session_maker",
@@ -72,6 +68,7 @@ __all__ = [
     "TokenResponse",
     # Settings
     "AuthSettings",
+    "AuthSettingsDep",
     "get_auth_settings",
     # User manager
     "UserManager",

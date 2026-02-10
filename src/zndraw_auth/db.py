@@ -3,10 +3,9 @@
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, Request
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID, SQLAlchemyUserDatabase
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
@@ -64,33 +63,6 @@ def create_engine_for_url(database_url: str) -> AsyncEngine:
         return create_async_engine(database_url, poolclass=NullPool)
     else:
         return create_async_engine(database_url)
-
-
-@asynccontextmanager
-async def database_lifespan(
-    app: FastAPI,
-    engine: AsyncEngine,
-) -> AsyncIterator[None]:
-    """Manage database engine lifecycle.
-
-    Stores engine and session_maker in app.state, disposes engine on shutdown.
-    Does NOT create tables - host app handles initialization.
-
-    Parameters
-    ----------
-    app : FastAPI
-        The FastAPI application instance.
-    engine : AsyncEngine
-        Pre-created engine (use create_engine_for_url to create one).
-    """
-    app.state.engine = engine
-    app.state.session_maker = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-
-    yield
-
-    await engine.dispose()
 
 
 def get_engine(request: Request) -> AsyncEngine:

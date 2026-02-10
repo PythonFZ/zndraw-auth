@@ -23,7 +23,6 @@ from zndraw_auth import (
     current_superuser,
     ensure_default_admin,
     fastapi_users,
-    get_auth_settings,
 )
 from zndraw_auth.db import Base
 from zndraw_auth.settings import AuthSettings
@@ -78,13 +77,21 @@ def test_settings_dev_mode() -> AuthSettings:
     )
 
 
-# --- App Fixtures ---
+# --- App Helper ---
 
 
-@pytest.fixture
-async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
-    """Create test FastAPI app with dependency overrides."""
-    # Create test engine and session maker
+async def _create_test_app(
+    settings: AuthSettings, *, create_admin: bool = True
+) -> FastAPI:
+    """Create a FastAPI test app with auth routes and test database.
+
+    Parameters
+    ----------
+    settings : AuthSettings
+        Auth settings to store in app.state.
+    create_admin : bool
+        Whether to create the default admin user.
+    """
     test_engine = create_async_engine(
         "sqlite+aiosqlite://",
         connect_args={"check_same_thread": False},
@@ -94,20 +101,19 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
 
     app = FastAPI()
 
-    # Store test engine and session_maker in app.state
+    # Store state for DI
     app.state.engine = test_engine
     app.state.session_maker = test_session_maker
+    app.state.auth_settings = settings
 
     # Create all tables
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Create default admin user using the utility function
-    async with test_session_maker() as session:
-        await ensure_default_admin(session, test_settings)
-
-    # Override settings dependency to use test settings
-    app.dependency_overrides[get_auth_settings] = lambda: test_settings
+    # Optionally create default admin
+    if create_admin:
+        async with test_session_maker() as session:
+            await ensure_default_admin(session, settings)
 
     # Include auth routers
     app.include_router(
@@ -159,13 +165,21 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
         value = result.scalar()
         return {"db_check": str(value)}
 
+    return app
+
+
+# --- App Fixtures ---
+
+
+@pytest.fixture
+async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
+    """Create test FastAPI app with dependency overrides."""
+    app = await _create_test_app(test_settings)
+
     yield app
 
     # Cleanup
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await test_engine.dispose()
-    app.dependency_overrides.clear()
+    await app.state.engine.dispose()
 
 
 @pytest.fixture
@@ -186,68 +200,12 @@ async def app_dev_mode(
     test_settings_dev_mode: AuthSettings,
 ) -> AsyncGenerator[FastAPI, None]:
     """Create test FastAPI app in dev mode (all users become superusers)."""
-    # Create test engine and session maker
-    test_engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    test_session_maker = async_sessionmaker(test_engine, expire_on_commit=False)
-
-    app = FastAPI()
-
-    # Store test engine and session_maker in app.state
-    app.state.engine = test_engine
-    app.state.session_maker = test_session_maker
-
-    # Create all tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # In dev mode, no admin is created (all users become superusers)
-
-    # Override settings dependency to use test settings
-    app.dependency_overrides[get_auth_settings] = lambda: test_settings_dev_mode
-
-    # Include auth routers
-    app.include_router(
-        fastapi_users.get_auth_router(auth_backend),
-        prefix="/auth/jwt",
-        tags=["auth"],
-    )
-    app.include_router(
-        fastapi_users.get_register_router(UserRead, UserCreate),
-        prefix="/auth",
-        tags=["auth"],
-    )
-    app.include_router(
-        fastapi_users.get_users_router(UserRead, UserUpdate),
-        prefix="/users",
-        tags=["users"],
-    )
-
-    # Test routes for dependency injection
-    @app.get("/test/protected")
-    async def protected_route(
-        user: Annotated[User, Depends(current_active_user)],
-    ) -> dict[str, str]:
-        """Route requiring authenticated active user."""
-        return {"user_id": str(user.id), "email": user.email}
-
-    @app.get("/test/superuser")
-    async def superuser_route(
-        user: Annotated[User, Depends(current_superuser)],
-    ) -> dict[str, str]:
-        """Route requiring superuser."""
-        return {"user_id": str(user.id), "is_superuser": str(user.is_superuser)}
+    app = await _create_test_app(test_settings_dev_mode, create_admin=False)
 
     yield app
 
     # Cleanup
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await test_engine.dispose()
-    app.dependency_overrides.clear()
+    await app.state.engine.dispose()
 
 
 @pytest.fixture
