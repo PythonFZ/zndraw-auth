@@ -101,7 +101,9 @@ def get_engine(request: Request) -> AsyncEngine:
 def get_session_maker(request: Request) -> async_sessionmaker[AsyncSession]:
     """Retrieve session maker from app.state.
 
-    Override point #2 (PRIMARY - most tests override here).
+    Override point #2 (PRIMARY for tests).
+    Tests override by setting app.state.session_maker directly.
+    Can also be overridden via app.dependency_overrides[get_session_maker].
 
     Returns factory, not session, because:
     - Long-polling needs multiple sessions per request
