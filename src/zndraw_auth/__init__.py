@@ -6,8 +6,8 @@ Example usage:
         current_superuser,
         fastapi_users,
         auth_backend,
-        get_async_session,
-        create_db_and_tables,
+        get_session,
+        database_lifespan,
         User,
         UserRead,
         UserCreate,
@@ -27,10 +27,14 @@ Example usage:
 
 from zndraw_auth.db import (
     Base,
+    SessionDep,
     User,
-    create_db_and_tables,
+    create_engine_for_url,
+    database_lifespan,
     ensure_default_admin,
-    get_async_session,
+    get_engine,
+    get_session,
+    get_session_maker,
     get_user_db,
 )
 from zndraw_auth.schemas import TokenResponse, UserCreate, UserRead, UserUpdate
@@ -50,11 +54,17 @@ __all__ = [
     "Base",
     # User model
     "User",
-    # Database
-    "create_db_and_tables",
-    "ensure_default_admin",
-    "get_async_session",
+    # Database lifecycle
+    "database_lifespan",
+    # Database dependencies
+    "get_engine",
+    "get_session_maker",
+    "get_session",
+    "SessionDep",
     "get_user_db",
+    # Database utilities
+    "create_engine_for_url",
+    "ensure_default_admin",
     # Schemas
     "UserCreate",
     "UserRead",

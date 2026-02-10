@@ -5,26 +5,29 @@ from typing import Annotated
 
 import pytest
 from fastapi import Depends, FastAPI
+from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from zndraw_auth import (
+    SessionDep,
     User,
     UserCreate,
     UserRead,
     UserUpdate,
     auth_backend,
-    create_db_and_tables,
     current_active_user,
     current_optional_user,
     current_superuser,
     fastapi_users,
-    get_async_session,
     get_auth_settings,
+    get_session,
+    get_session_maker,
 )
-from zndraw_auth.db import Base, get_engine
+from zndraw_auth.db import Base
 from zndraw_auth.settings import AuthSettings
 
 # --- Shared Test Models ---
@@ -33,36 +36,38 @@ from zndraw_auth.settings import AuthSettings
 class LoginForm(BaseModel):
     """OAuth2 password login form data for testing.
 
-    Note: FastAPI provides OAuth2PasswordRequestForm, but this simple model
-    is sufficient for our test needs.
+    Uses grant_type=password for RFC 6749 OAuth2 password flow.
     """
 
-    username: str  # email in our case
+    username: str  # email
     password: str
+    grant_type: str = "password"
+    scope: str = ""
+    client_id: str | None = None
+    client_secret: str | None = None
 
 
-# --- Test Fixtures ---
+class TokenPair(BaseModel):
+    """JWT token pair response."""
+
+    access_token: str
+    token_type: str = "bearer"
+
+
+# --- Settings Fixtures ---
 
 
 @pytest.fixture
-def login_form_class() -> type[LoginForm]:
-    """Fixture providing LoginForm class for OAuth2 login testing.
-
-    Usage:
-        def test_something(login_form_class):
-            form = login_form_class(username="user@example.com", password="pass")
-    """
+def login_form_class() -> type:
+    """Fixture that returns the LoginForm class for dependency injection."""
     return LoginForm
-
-
-# --- App Fixtures ---
 
 
 @pytest.fixture
 def test_settings() -> AuthSettings:
     """Settings with in-memory database (production mode with admin configured)."""
     return AuthSettings(
-        database_url="sqlite+aiosqlite:///:memory:",
+        database_url="sqlite+aiosqlite://",
         secret_key="test-secret-key",
         reset_password_token_secret="test-reset-secret",
         verification_token_secret="test-verify-secret",
@@ -76,7 +81,7 @@ def test_settings() -> AuthSettings:
 def test_settings_dev_mode() -> AuthSettings:
     """Settings in dev mode (no admin configured, all users become superusers)."""
     return AuthSettings(
-        database_url="sqlite+aiosqlite:///:memory:",
+        database_url="sqlite+aiosqlite://",
         secret_key="test-secret-key",
         reset_password_token_secret="test-reset-secret",
         verification_token_secret="test-verify-secret",
@@ -84,16 +89,48 @@ def test_settings_dev_mode() -> AuthSettings:
     )
 
 
+# --- App Fixtures ---
+
+
 @pytest.fixture
 async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
     """Create test FastAPI app with dependency overrides."""
+    # Create test engine and session maker
+    test_engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    test_session_maker = async_sessionmaker(test_engine, expire_on_commit=False)
+
     app = FastAPI()
+
+    # Store test engine in app.state
+    app.state.engine = test_engine
+
+    # Create all tables
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Create default admin user directly (since we're managing the engine)
+    async with test_session_maker() as session:
+        hashed = PasswordHelper().hash(
+            test_settings.default_admin_password.get_secret_value()
+        )
+        admin = User(
+            email=test_settings.default_admin_email,
+            hashed_password=hashed,
+            is_active=True,
+            is_superuser=True,
+            is_verified=True,
+        )
+        session.add(admin)
+        await session.commit()
 
     # Override settings dependency to use test settings
     app.dependency_overrides[get_auth_settings] = lambda: test_settings
-
-    # Create tables for this test's database
-    await create_db_and_tables(test_settings)
+    # Override session_maker to use test session_maker
+    app.dependency_overrides[get_session_maker] = lambda: test_session_maker
 
     # Include auth routers
     app.include_router(
@@ -128,7 +165,7 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
         return {"user_id": str(user.id), "is_superuser": str(user.is_superuser)}
 
     @app.get("/test/optional")
-    async def optional_auth_route(
+    async def optional_route(
         user: Annotated[User | None, Depends(current_optional_user)],
     ) -> dict[str, str | None]:
         """Route with optional authentication."""
@@ -138,7 +175,7 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
 
     @app.get("/test/session")
     async def session_route(
-        session: Annotated[AsyncSession, Depends(get_async_session)],
+        session: SessionDep,
     ) -> dict[str, str]:
         """Route using async session dependency."""
         result = await session.execute(text("SELECT 1"))
@@ -147,21 +184,19 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
 
     yield app
 
-    # Cleanup: drop all tables and clear caches
-    engine = get_engine(test_settings.database_url)
-    async with engine.begin() as conn:
+    # Cleanup
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-
-    # Clear lru_cache to ensure fresh engine/session for next test
-    get_engine.cache_clear()
-    from zndraw_auth.db import get_session_maker
-
-    get_session_maker.cache_clear()
+    await test_engine.dispose()
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
-    """Async test client."""
+    """Async test client.
+
+    HTTPX AsyncClient with ASGITransport automatically triggers the app's lifespan.
+    """
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -174,14 +209,29 @@ async def app_dev_mode(
     test_settings_dev_mode: AuthSettings,
 ) -> AsyncGenerator[FastAPI, None]:
     """Create test FastAPI app in dev mode (all users become superusers)."""
+    # Create test engine and session maker
+    test_engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    test_session_maker = async_sessionmaker(test_engine, expire_on_commit=False)
+
     app = FastAPI()
 
-    # Override settings dependency to use test settings
-    settings = test_settings_dev_mode
-    app.dependency_overrides[get_auth_settings] = lambda: settings
+    # Store test engine in app.state
+    app.state.engine = test_engine
 
-    # Create tables for this test's database
-    await create_db_and_tables(test_settings_dev_mode)
+    # Create all tables
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # In dev mode, no admin is created (all users become superusers)
+
+    # Override settings dependency to use test settings
+    app.dependency_overrides[get_auth_settings] = lambda: test_settings_dev_mode
+    # Override session_maker to use test session_maker
+    app.dependency_overrides[get_session_maker] = lambda: test_session_maker
 
     # Include auth routers
     app.include_router(
@@ -200,7 +250,14 @@ async def app_dev_mode(
         tags=["users"],
     )
 
-    # Test route for superuser check
+    # Test routes for dependency injection
+    @app.get("/test/protected")
+    async def protected_route(
+        user: Annotated[User, Depends(current_active_user)],
+    ) -> dict[str, str]:
+        """Route requiring authenticated active user."""
+        return {"user_id": str(user.id), "email": user.email}
+
     @app.get("/test/superuser")
     async def superuser_route(
         user: Annotated[User, Depends(current_superuser)],
@@ -210,16 +267,11 @@ async def app_dev_mode(
 
     yield app
 
-    # Cleanup: drop all tables and clear caches
-    engine = get_engine(test_settings_dev_mode.database_url)
-    async with engine.begin() as conn:
+    # Cleanup
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-
-    # Clear lru_cache to ensure fresh engine/session for next test
-    get_engine.cache_clear()
-    from zndraw_auth.db import get_session_maker
-
-    get_session_maker.cache_clear()
+    await test_engine.dispose()
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

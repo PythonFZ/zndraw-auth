@@ -2,11 +2,11 @@
 
 import logging
 import uuid
-from collections.abc import AsyncGenerator
-from functools import lru_cache
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, FastAPI, Request
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID, SQLAlchemyUserDatabase
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool, StaticPool
 from sqlmodel import SQLModel
 
 from zndraw_auth.settings import AuthSettings, get_auth_settings
@@ -45,103 +46,152 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     pass
 
 
-@lru_cache
-def get_engine(database_url: str) -> AsyncEngine:
-    """Get or create the async engine (cached by URL)."""
-    return create_async_engine(database_url, echo=False)
+def create_engine_for_url(database_url: str) -> AsyncEngine:
+    """Create engine with appropriate connection pooling.
 
-
-@lru_cache
-def get_session_maker(database_url: str) -> async_sessionmaker[AsyncSession]:
-    """Get or create the session maker (cached by URL)."""
-    engine = get_engine(database_url)
-    return async_sessionmaker(engine, expire_on_commit=False)
-
-
-async def create_db_and_tables(settings: AuthSettings | None = None) -> None:
-    """Create all database tables and ensure default admin exists.
-
-    Call this in your app's lifespan or startup.
+    Strategy:
+    - In-memory SQLite: StaticPool (single shared connection)
+    - File SQLite: NullPool (connection per checkout, avoids locks)
+    - PostgreSQL: QueuePool (default connection pool)
     """
-    if settings is None:
-        settings = get_auth_settings()
-    engine = get_engine(settings.database_url)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if database_url == "sqlite+aiosqlite://":
+        return create_async_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+    elif database_url.startswith("sqlite"):
+        return create_async_engine(database_url, poolclass=NullPool)
+    else:
+        return create_async_engine(database_url)
 
-    # Ensure default admin user exists (if configured)
-    await ensure_default_admin(settings)
 
+@asynccontextmanager
+async def database_lifespan(
+    app: FastAPI,
+    settings: AuthSettings | None = None,
+) -> AsyncIterator[None]:
+    """Manage database engine lifecycle.
 
-async def ensure_default_admin(settings: AuthSettings | None = None) -> None:
-    """Create or promote the default admin user if configured.
-
-    If DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASSWORD are set:
-    - Creates the user with is_superuser=True if they don't exist
-    - Promotes existing user to superuser if they exist but aren't one
-
-    If not configured, does nothing (dev mode - all users are superusers).
+    Creates engine, stores in app.state, cleans up on shutdown.
+    Does NOT create tables - host app handles initialization.
     """
     if settings is None:
         settings = get_auth_settings()
 
-    admin_email = settings.default_admin_email
-    admin_password = settings.default_admin_password
+    engine = create_engine_for_url(settings.database_url)
+    app.state.engine = engine
 
-    if admin_email is None:
+    yield
+
+    await engine.dispose()
+
+
+def get_engine(request: Request) -> AsyncEngine:
+    """Retrieve engine from app.state.
+
+    Override point #1 (advanced use cases).
+    """
+    return request.app.state.engine
+
+
+def get_session_maker(
+    engine: Annotated[AsyncEngine, Depends(get_engine)],
+) -> async_sessionmaker[AsyncSession]:
+    """Create session maker from engine.
+
+    Override point #2 (PRIMARY - most tests override here).
+
+    Returns factory, not session, because:
+    - Long-polling needs multiple sessions per request
+    - Socket.IO needs session per event
+    - TaskIQ needs session per task
+    """
+    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+async def get_session(
+    session_maker: Annotated[
+        async_sessionmaker[AsyncSession], Depends(get_session_maker)
+    ],
+) -> AsyncIterator[AsyncSession]:
+    """Yield request-scoped session.
+
+    Override point #3 (rare - specific session mocking).
+
+    Session lifecycle:
+    - Created at request time
+    - Auto-committed on success
+    - Rolled back on exception
+    - Closed after request
+    """
+    async with session_maker() as session:
+        yield session
+
+
+# Type alias for convenience
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+async def ensure_default_admin(settings: AuthSettings) -> None:
+    """Create or promote default admin user.
+
+    Called by host app during initialization.
+    Idempotent - safe to call multiple times.
+
+    If default_admin_email is None, runs in dev mode (all users are superusers).
+    """
+    if settings.default_admin_email is None:
         log.info("No default admin configured - running in dev mode")
         return
 
-    if admin_password is None:
+    if settings.default_admin_password is None:
         log.warning(
             "DEFAULT_ADMIN_EMAIL is set but DEFAULT_ADMIN_PASSWORD is not - "
             "skipping admin creation"
         )
         return
 
-    session_maker = get_session_maker(settings.database_url)
+    # Create session_maker directly (outside request context)
+    engine = create_engine_for_url(settings.database_url)
+    session_maker = async_sessionmaker(engine, expire_on_commit=False)
     password_helper = PasswordHelper()
 
     async with session_maker() as session:
-        # Check if user already exists
+        # Check if user exists
         result = await session.execute(
-            select(User).where(User.email == admin_email)  # type: ignore[arg-type]
+            select(User).where(User.email == settings.default_admin_email)  # type: ignore[arg-type]
         )
-        existing_user = result.scalar_one_or_none()
+        existing = result.scalar_one_or_none()
 
-        if existing_user is None:
-            # Create new admin user
-            hashed_password = password_helper.hash(admin_password.get_secret_value())
-            admin_user = User(
-                email=admin_email,
-                hashed_password=hashed_password,
+        if existing is None:
+            # Create admin user
+            hashed = password_helper.hash(
+                settings.default_admin_password.get_secret_value()
+            )
+            admin = User(
+                email=settings.default_admin_email,
+                hashed_password=hashed,
                 is_active=True,
                 is_superuser=True,
                 is_verified=True,
             )
-            session.add(admin_user)
+            session.add(admin)
             await session.commit()
-            log.info(f"Created default admin user: {admin_email}")
-        elif not existing_user.is_superuser:
-            # Promote existing user to superuser
-            existing_user.is_superuser = True
+            log.info(f"Created default admin user: {settings.default_admin_email}")
+        elif not existing.is_superuser:
+            # Promote to superuser
+            existing.is_superuser = True
             await session.commit()
-            log.info(f"Promoted user to superuser: {admin_email}")
+            log.info(f"Promoted user to superuser: {settings.default_admin_email}")
         else:
-            log.debug(f"Default admin already exists: {admin_email}")
+            log.debug(f"Default admin already exists: {settings.default_admin_email}")
 
-
-async def get_async_session(
-    settings: Annotated[AuthSettings, Depends(get_auth_settings)],
-) -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency that yields an async database session."""
-    session_maker = get_session_maker(settings.database_url)
-    async with session_maker() as session:
-        yield session
+    await engine.dispose()
 
 
 async def get_user_db(
-    session: Annotated[AsyncSession, Depends(get_async_session)],
-) -> AsyncGenerator[SQLAlchemyUserDatabase[User, uuid.UUID], None]:
+    session: SessionDep,
+) -> AsyncIterator[SQLAlchemyUserDatabase[User, uuid.UUID]]:
     """FastAPI dependency that yields the user database adapter."""
     yield SQLAlchemyUserDatabase[User, uuid.UUID](session, User)
