@@ -2,23 +2,8 @@
 
 import pytest
 from httpx import AsyncClient
-from pydantic import BaseModel
 
-from zndraw_auth import UserCreate, UserRead
-
-
-class LoginForm(BaseModel):
-    """OAuth2 password login form data."""
-
-    username: str  # email in our case
-    password: str
-
-
-class TokenResponse(BaseModel):
-    """OAuth2 bearer token response."""
-
-    access_token: str
-    token_type: str
+from zndraw_auth import TokenResponse, UserCreate, UserRead
 
 
 @pytest.mark.asyncio
@@ -38,15 +23,15 @@ async def test_register_user(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_login_user(client: AsyncClient) -> None:
+async def test_login_user(client: AsyncClient, login_form_class: type) -> None:
     """Test user login."""
     # Register first
     user_data = UserCreate(email="login@example.com", password="testpassword123")
     await client.post("/auth/register", json=user_data.model_dump())
 
     # Login
-    login_form = LoginForm(username=user_data.email, password="testpassword123")
-    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
+    form = login_form_class(username=user_data.email, password="testpassword123")
+    response = await client.post("/auth/jwt/login", data=form.model_dump())
     assert response.status_code == 200
     token = TokenResponse.model_validate(response.json())
     assert token.access_token
@@ -54,15 +39,17 @@ async def test_login_user(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_login_invalid_credentials(client: AsyncClient) -> None:
+async def test_login_invalid_credentials(
+    client: AsyncClient, login_form_class: type
+) -> None:
     """Test login with wrong password."""
     # Register
     user_data = UserCreate(email="wrong@example.com", password="correctpassword")
     await client.post("/auth/register", json=user_data.model_dump())
 
     # Login with wrong password
-    login_form = LoginForm(username=user_data.email, password="wrongpassword")
-    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
+    form = login_form_class(username=user_data.email, password="wrongpassword")
+    response = await client.post("/auth/jwt/login", data=form.model_dump())
     assert response.status_code == 400
 
 
@@ -83,21 +70,25 @@ async def test_register_duplicate_email(client: AsyncClient) -> None:
 
 
 async def _get_auth_header(
-    client: AsyncClient, email: str, password: str
+    client: AsyncClient, email: str, password: str, login_form_class: type
 ) -> dict[str, str]:
     """Helper to register, login, and return auth header."""
     user_data = UserCreate(email=email, password=password)
     await client.post("/auth/register", json=user_data.model_dump())
-    login_form = LoginForm(username=email, password=password)
-    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
+    form = login_form_class(username=email, password=password)
+    response = await client.post("/auth/jwt/login", data=form.model_dump())
     token = TokenResponse.model_validate(response.json())
     return {"Authorization": f"Bearer {token.access_token}"}
 
 
 @pytest.mark.asyncio
-async def test_current_active_user_dependency(client: AsyncClient) -> None:
+async def test_current_active_user_dependency(
+    client: AsyncClient, login_form_class: type
+) -> None:
     """Test current_active_user dependency injection."""
-    headers = await _get_auth_header(client, "active@example.com", "password123")
+    headers = await _get_auth_header(
+        client, "active@example.com", "password123", login_form_class
+    )
 
     response = await client.get("/test/protected", headers=headers)
     assert response.status_code == 200
@@ -114,18 +105,26 @@ async def test_current_active_user_unauthorized(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_current_superuser_forbidden(client: AsyncClient) -> None:
+async def test_current_superuser_forbidden(
+    client: AsyncClient, login_form_class: type
+) -> None:
     """Test current_superuser rejects non-superusers."""
-    headers = await _get_auth_header(client, "regular@example.com", "password123")
+    headers = await _get_auth_header(
+        client, "regular@example.com", "password123", login_form_class
+    )
 
     response = await client.get("/test/superuser", headers=headers)
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_current_optional_user_authenticated(client: AsyncClient) -> None:
+async def test_current_optional_user_authenticated(
+    client: AsyncClient, login_form_class: type
+) -> None:
     """Test current_optional_user with authenticated user."""
-    headers = await _get_auth_header(client, "optional@example.com", "password123")
+    headers = await _get_auth_header(
+        client, "optional@example.com", "password123", login_form_class
+    )
 
     response = await client.get("/test/optional", headers=headers)
     assert response.status_code == 200
@@ -157,12 +156,14 @@ async def test_get_async_session_dependency(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_default_admin_created_on_startup(client: AsyncClient) -> None:
+async def test_default_admin_created_on_startup(
+    client: AsyncClient, login_form_class: type
+) -> None:
     """Test that default admin is created on startup when configured."""
     # The test_settings fixture has default_admin_email="admin@test.com"
     # This admin should have been created during create_db_and_tables()
-    login_form = LoginForm(username="admin@test.com", password="admin-password")
-    response = await client.post("/auth/jwt/login", data=login_form.model_dump())
+    form = login_form_class(username="admin@test.com", password="admin-password")
+    response = await client.post("/auth/jwt/login", data=form.model_dump())
     assert response.status_code == 200
     token = TokenResponse.model_validate(response.json())
 
@@ -175,7 +176,9 @@ async def test_default_admin_created_on_startup(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dev_mode_all_users_superuser(client_dev_mode: AsyncClient) -> None:
+async def test_dev_mode_all_users_superuser(
+    client_dev_mode: AsyncClient, login_form_class: type
+) -> None:
     """Test that users are superusers in dev mode (no admin configured)."""
     # Register a user
     user_data = UserCreate(email="devuser@example.com", password="password123")
@@ -188,10 +191,8 @@ async def test_dev_mode_all_users_superuser(client_dev_mode: AsyncClient) -> Non
     assert user.is_superuser is True
 
     # Login and verify we can access superuser-protected route
-    login_form = LoginForm(username=user_data.email, password="password123")
-    response = await client_dev_mode.post(
-        "/auth/jwt/login", data=login_form.model_dump()
-    )
+    form = login_form_class(username=user_data.email, password="password123")
+    response = await client_dev_mode.post("/auth/jwt/login", data=form.model_dump())
     token = TokenResponse.model_validate(response.json())
     headers = {"Authorization": f"Bearer {token.access_token}"}
 

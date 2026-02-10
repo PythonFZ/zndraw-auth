@@ -20,6 +20,7 @@ from zndraw_auth import (
     User,
     UserCreate,
     UserRead,
+    UserUpdate,
     auth_backend,
     create_db_and_tables,
     current_active_user,
@@ -46,11 +47,85 @@ app.include_router(
     prefix="/auth",
     tags=["auth"],
 )
+app.include_router(
+    fastapi_users.get_users_router(UserRead, UserUpdate),
+    prefix="/users",
+    tags=["users"],
+)
 
 
 @app.get("/protected")
 async def protected_route(user: User = Depends(current_active_user)):
     return {"message": f"Hello {user.email}!"}
+```
+
+## Available Routers
+
+zndraw-auth provides access to three fastapi-users routers that you can include in your app:
+
+### Authentication Router
+
+```python
+app.include_router(
+    fastapi_users.get_auth_router(auth_backend),
+    prefix="/auth/jwt",
+    tags=["auth"],
+)
+```
+
+**Provides:**
+- `POST /auth/jwt/login` - Login with email/password, returns JWT token
+- `POST /auth/jwt/logout` - Logout (revokes token)
+
+### Registration Router
+
+```python
+app.include_router(
+    fastapi_users.get_register_router(UserRead, UserCreate),
+    prefix="/auth",
+    tags=["auth"],
+)
+```
+
+**Provides:**
+- `POST /auth/register` - Create new user account
+
+### Users Router (Profile & User Management)
+
+```python
+app.include_router(
+    fastapi_users.get_users_router(UserRead, UserUpdate),
+    prefix="/users",
+    tags=["users"],
+)
+```
+
+**Provides:**
+- `GET /users/me` - Get current user profile (email, is_superuser, etc.)
+- `PATCH /users/me` - Update own profile (email, password)
+- `GET /users/{user_id}` - Get any user (superuser only)
+- `PATCH /users/{user_id}` - Update any user (superuser only)
+- `DELETE /users/{user_id}` - Delete user (superuser only)
+
+**When to include:**
+- ✅ Include if clients need to view/edit user profiles
+- ✅ Include if superusers need to manage users via API
+- ⚠️ Skip if you implement custom user management endpoints
+
+**Example client usage:**
+
+```bash
+# Get current user profile (requires authentication)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/users/me
+
+# Response:
+# {
+#   "id": "4fd3477b-eccf-4ee3-8f7d-68ad72261476",
+#   "email": "user@example.com",
+#   "is_active": true,
+#   "is_superuser": false,
+#   "is_verified": false
+# }
 ```
 
 ## Extending with Custom Models (e.g., zndraw-joblib)
@@ -161,6 +236,7 @@ from fastapi import FastAPI
 from zndraw_auth import (
     UserCreate,
     UserRead,
+    UserUpdate,
     auth_backend,
     create_db_and_tables,
     fastapi_users,
@@ -187,6 +263,11 @@ app.include_router(
     fastapi_users.get_register_router(UserRead, UserCreate),
     prefix="/auth",
     tags=["auth"],
+)
+app.include_router(
+    fastapi_users.get_users_router(UserRead, UserUpdate),
+    prefix="/users",
+    tags=["users"],
 )
 
 # Job routes from zndraw-joblib
@@ -242,9 +323,9 @@ from zndraw_auth import (
     get_user_db,
 
     # Pydantic schemas
-    UserCreate,
-    UserRead,
-    UserUpdate,
+    UserCreate,    # For registration (get_register_router)
+    UserRead,      # For responses (all routers)
+    UserUpdate,    # For profile updates (get_users_router)
 
     # Settings
     AuthSettings,

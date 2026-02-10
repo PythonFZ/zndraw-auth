@@ -33,7 +33,7 @@ from zndraw_auth.db import (
     get_async_session,
     get_user_db,
 )
-from zndraw_auth.schemas import UserCreate, UserRead, UserUpdate
+from zndraw_auth.schemas import TokenResponse, UserCreate, UserRead, UserUpdate
 from zndraw_auth.settings import AuthSettings, get_auth_settings
 from zndraw_auth.users import (
     UserManager,
@@ -59,6 +59,7 @@ __all__ = [
     "UserCreate",
     "UserRead",
     "UserUpdate",
+    "TokenResponse",
     # Settings
     "AuthSettings",
     "get_auth_settings",

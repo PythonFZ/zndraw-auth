@@ -6,6 +6,7 @@ from typing import Annotated
 import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,7 @@ from zndraw_auth import (
     User,
     UserCreate,
     UserRead,
+    UserUpdate,
     auth_backend,
     create_db_and_tables,
     current_active_user,
@@ -24,6 +26,36 @@ from zndraw_auth import (
 )
 from zndraw_auth.db import Base, get_engine
 from zndraw_auth.settings import AuthSettings
+
+# --- Shared Test Models ---
+
+
+class LoginForm(BaseModel):
+    """OAuth2 password login form data for testing.
+
+    Note: FastAPI provides OAuth2PasswordRequestForm, but this simple model
+    is sufficient for our test needs.
+    """
+
+    username: str  # email in our case
+    password: str
+
+
+# --- Test Fixtures ---
+
+
+@pytest.fixture
+def login_form_class() -> type[LoginForm]:
+    """Fixture providing LoginForm class for OAuth2 login testing.
+
+    Usage:
+        def test_something(login_form_class):
+            form = login_form_class(username="user@example.com", password="pass")
+    """
+    return LoginForm
+
+
+# --- App Fixtures ---
 
 
 @pytest.fixture
@@ -73,6 +105,11 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
         fastapi_users.get_register_router(UserRead, UserCreate),
         prefix="/auth",
         tags=["auth"],
+    )
+    app.include_router(
+        fastapi_users.get_users_router(UserRead, UserUpdate),
+        prefix="/users",
+        tags=["users"],
     )
 
     # Test routes for dependency injection
@@ -156,6 +193,11 @@ async def app_dev_mode(
         fastapi_users.get_register_router(UserRead, UserCreate),
         prefix="/auth",
         tags=["auth"],
+    )
+    app.include_router(
+        fastapi_users.get_users_router(UserRead, UserUpdate),
+        prefix="/users",
+        tags=["users"],
     )
 
     # Test route for superuser check
