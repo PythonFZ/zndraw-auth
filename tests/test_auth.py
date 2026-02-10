@@ -144,8 +144,8 @@ async def test_current_optional_user_anonymous(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_async_session_dependency(client: AsyncClient) -> None:
-    """Test get_async_session dependency injection."""
+async def test_get_session_dependency(client: AsyncClient) -> None:
+    """Test get_session dependency injection."""
     response = await client.get("/test/session")
     assert response.status_code == 200
     data = response.json()
@@ -161,7 +161,7 @@ async def test_default_admin_created_on_startup(
 ) -> None:
     """Test that default admin is created on startup when configured."""
     # The test_settings fixture has default_admin_email="admin@test.com"
-    # This admin should have been created during create_db_and_tables()
+    # This admin should have been created during ensure_default_admin()
     form = login_form_class(username="admin@test.com", password="admin-password")
     response = await client.post("/auth/jwt/login", data=form.model_dump())
     assert response.status_code == 200

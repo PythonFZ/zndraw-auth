@@ -81,6 +81,9 @@ async def database_lifespan(
 
     engine = create_engine_for_url(settings.database_url)
     app.state.engine = engine
+    app.state.session_maker = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     yield
 
@@ -95,10 +98,8 @@ def get_engine(request: Request) -> AsyncEngine:
     return request.app.state.engine
 
 
-def get_session_maker(
-    engine: Annotated[AsyncEngine, Depends(get_engine)],
-) -> async_sessionmaker[AsyncSession]:
-    """Create session maker from engine.
+def get_session_maker(request: Request) -> async_sessionmaker[AsyncSession]:
+    """Retrieve session maker from app.state.
 
     Override point #2 (PRIMARY - most tests override here).
 
@@ -107,7 +108,7 @@ def get_session_maker(
     - Socket.IO needs session per event
     - TaskIQ needs session per task
     """
-    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    return request.app.state.session_maker
 
 
 async def get_session(
@@ -121,7 +122,7 @@ async def get_session(
 
     Session lifecycle:
     - Created at request time
-    - Auto-committed on success
+    - Must be explicitly committed by caller
     - Rolled back on exception
     - Closed after request
     """

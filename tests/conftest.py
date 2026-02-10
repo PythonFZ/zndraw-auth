@@ -24,8 +24,6 @@ from zndraw_auth import (
     ensure_default_admin,
     fastapi_users,
     get_auth_settings,
-    get_session,
-    get_session_maker,
 )
 from zndraw_auth.db import Base
 from zndraw_auth.settings import AuthSettings
@@ -45,13 +43,6 @@ class LoginForm(BaseModel):
     scope: str = ""
     client_id: str | None = None
     client_secret: str | None = None
-
-
-class TokenPair(BaseModel):
-    """JWT token pair response."""
-
-    access_token: str
-    token_type: str = "bearer"
 
 
 # --- Settings Fixtures ---
@@ -105,8 +96,9 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
 
     app = FastAPI()
 
-    # Store test engine in app.state
+    # Store test engine and session_maker in app.state
     app.state.engine = test_engine
+    app.state.session_maker = test_session_maker
 
     # Create all tables
     async with test_engine.begin() as conn:
@@ -118,8 +110,6 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
 
     # Override settings dependency to use test settings
     app.dependency_overrides[get_auth_settings] = lambda: test_settings
-    # Override session_maker to use test session_maker
-    app.dependency_overrides[get_session_maker] = lambda: test_session_maker
 
     # Include auth routers
     app.include_router(
@@ -208,8 +198,9 @@ async def app_dev_mode(
 
     app = FastAPI()
 
-    # Store test engine in app.state
+    # Store test engine and session_maker in app.state
     app.state.engine = test_engine
+    app.state.session_maker = test_session_maker
 
     # Create all tables
     async with test_engine.begin() as conn:
@@ -219,8 +210,6 @@ async def app_dev_mode(
 
     # Override settings dependency to use test settings
     app.dependency_overrides[get_auth_settings] = lambda: test_settings_dev_mode
-    # Override session_maker to use test session_maker
-    app.dependency_overrides[get_session_maker] = lambda: test_session_maker
 
     # Include auth routers
     app.include_router(

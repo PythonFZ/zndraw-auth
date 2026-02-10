@@ -15,7 +15,6 @@ uv add zndraw-auth
 ```python
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from zndraw_auth import (
     User,
@@ -40,8 +39,7 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
 
         # Create default admin user
-        session_maker = async_sessionmaker(app.state.engine, expire_on_commit=False)
-        async with session_maker() as session:
+        async with app.state.session_maker() as session:
             await ensure_default_admin(session, get_auth_settings())
 
         yield
@@ -244,7 +242,6 @@ async def get_job(
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from zndraw_auth import (
     UserCreate,
@@ -268,8 +265,7 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
 
         # Create default admin user
-        session_maker = async_sessionmaker(app.state.engine, expire_on_commit=False)
-        async with session_maker() as session:
+        async with app.state.session_maker() as session:
             await ensure_default_admin(session, get_auth_settings())
 
         yield
