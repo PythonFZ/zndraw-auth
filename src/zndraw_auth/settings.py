@@ -30,9 +30,6 @@ class AuthSettings(BaseSettings):
     secret_key: SecretStr = SecretStr("CHANGE-ME-IN-PRODUCTION")
     token_lifetime_seconds: int = 3600  # 1 hour
 
-    # Database
-    database_url: str = "sqlite+aiosqlite://"  # In-memory by default
-
     # Password reset / verification tokens
     reset_password_token_secret: SecretStr = SecretStr("CHANGE-ME-RESET")
     verification_token_secret: SecretStr = SecretStr("CHANGE-ME-VERIFY")

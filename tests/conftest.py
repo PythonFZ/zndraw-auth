@@ -58,7 +58,6 @@ def login_form_class() -> type:
 def test_settings() -> AuthSettings:
     """Settings with in-memory database (production mode with admin configured)."""
     return AuthSettings(
-        database_url="sqlite+aiosqlite://",
         secret_key="test-secret-key",
         reset_password_token_secret="test-reset-secret",
         verification_token_secret="test-verify-secret",
@@ -72,7 +71,6 @@ def test_settings() -> AuthSettings:
 def test_settings_dev_mode() -> AuthSettings:
     """Settings in dev mode (no admin configured, all users become superusers)."""
     return AuthSettings(
-        database_url="sqlite+aiosqlite://",
         secret_key="test-secret-key",
         reset_password_token_secret="test-reset-secret",
         verification_token_secret="test-verify-secret",

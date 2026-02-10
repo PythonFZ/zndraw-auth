@@ -22,6 +22,7 @@ from zndraw_auth import (
     UserRead,
     UserUpdate,
     auth_backend,
+    create_engine_for_url,
     current_active_user,
     database_lifespan,
     ensure_default_admin,
@@ -30,10 +31,12 @@ from zndraw_auth import (
 )
 from zndraw_auth.db import Base
 
+engine = create_engine_for_url("sqlite+aiosqlite://")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with database_lifespan(app):
+    async with database_lifespan(app, engine):
         # Create all tables
         async with app.state.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -248,6 +251,7 @@ from zndraw_auth import (
     UserRead,
     UserUpdate,
     auth_backend,
+    create_engine_for_url,
     database_lifespan,
     ensure_default_admin,
     fastapi_users,
@@ -256,10 +260,12 @@ from zndraw_auth import (
 from zndraw_auth.db import Base
 from zndraw_joblib.routes import router as jobs_router
 
+engine = create_engine_for_url("sqlite+aiosqlite:///./zndraw.db")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with database_lifespan(app):
+    async with database_lifespan(app, engine):
         # Create all tables (User from zndraw-auth AND Job from zndraw-joblib)
         async with app.state.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -302,23 +308,12 @@ Settings are loaded from environment variables with the `ZNDRAW_AUTH_` prefix:
 |----------|---------|-------------|
 | `ZNDRAW_AUTH_SECRET_KEY` | `CHANGE-ME-IN-PRODUCTION` | JWT signing secret |
 | `ZNDRAW_AUTH_TOKEN_LIFETIME_SECONDS` | `3600` | JWT token lifetime |
-| `ZNDRAW_AUTH_DATABASE_URL` | `sqlite+aiosqlite://` | Database connection URL (in-memory by default) |
 | `ZNDRAW_AUTH_RESET_PASSWORD_TOKEN_SECRET` | `CHANGE-ME-RESET` | Password reset token secret |
 | `ZNDRAW_AUTH_VERIFICATION_TOKEN_SECRET` | `CHANGE-ME-VERIFY` | Email verification token secret |
 | `ZNDRAW_AUTH_DEFAULT_ADMIN_EMAIL` | `None` | Email for the default admin user |
 | `ZNDRAW_AUTH_DEFAULT_ADMIN_PASSWORD` | `None` | Password for the default admin user |
 
-### Database Persistence
-
-By default, the database is in-memory (data lost on restart). For production or persistent storage:
-
-```bash
-# File-based SQLite
-export ZNDRAW_AUTH_DATABASE_URL="sqlite+aiosqlite:///./zndraw_auth.db"
-
-# PostgreSQL
-export ZNDRAW_AUTH_DATABASE_URL="postgresql+asyncpg://user:pass@localhost/dbname"
-```
+**Note:** The database URL is not configured here — the host application creates the engine and passes it to `database_lifespan`. Use `create_engine_for_url()` for automatic pool selection.
 
 ### Dev Mode vs Production Mode
 

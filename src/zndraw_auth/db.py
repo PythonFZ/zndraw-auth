@@ -20,7 +20,7 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool, StaticPool
 from sqlmodel import SQLModel
 
-from zndraw_auth.settings import AuthSettings, get_auth_settings
+from zndraw_auth.settings import AuthSettings
 
 log = logging.getLogger(__name__)
 
@@ -69,17 +69,20 @@ def create_engine_for_url(database_url: str) -> AsyncEngine:
 @asynccontextmanager
 async def database_lifespan(
     app: FastAPI,
-    settings: AuthSettings | None = None,
+    engine: AsyncEngine,
 ) -> AsyncIterator[None]:
     """Manage database engine lifecycle.
 
-    Creates engine, stores in app.state, cleans up on shutdown.
+    Stores engine and session_maker in app.state, disposes engine on shutdown.
     Does NOT create tables - host app handles initialization.
-    """
-    if settings is None:
-        settings = get_auth_settings()
 
-    engine = create_engine_for_url(settings.database_url)
+    Parameters
+    ----------
+    app : FastAPI
+        The FastAPI application instance.
+    engine : AsyncEngine
+        Pre-created engine (use create_engine_for_url to create one).
+    """
     app.state.engine = engine
     app.state.session_maker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
