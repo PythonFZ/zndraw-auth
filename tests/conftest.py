@@ -5,7 +5,6 @@ from typing import Annotated
 
 import pytest
 from fastapi import Depends, FastAPI
-from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -22,6 +21,7 @@ from zndraw_auth import (
     current_active_user,
     current_optional_user,
     current_superuser,
+    ensure_default_admin,
     fastapi_users,
     get_auth_settings,
     get_session,
@@ -112,20 +112,9 @@ async def app(test_settings: AuthSettings) -> AsyncGenerator[FastAPI, None]:
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Create default admin user directly (since we're managing the engine)
+    # Create default admin user using the utility function
     async with test_session_maker() as session:
-        hashed = PasswordHelper().hash(
-            test_settings.default_admin_password.get_secret_value()
-        )
-        admin = User(
-            email=test_settings.default_admin_email,
-            hashed_password=hashed,
-            is_active=True,
-            is_superuser=True,
-            is_verified=True,
-        )
-        session.add(admin)
-        await session.commit()
+        await ensure_default_admin(session, test_settings)
 
     # Override settings dependency to use test settings
     app.dependency_overrides[get_auth_settings] = lambda: test_settings

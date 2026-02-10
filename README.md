@@ -15,6 +15,7 @@ uv add zndraw-auth
 ```python
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from zndraw_auth import (
     User,
@@ -22,16 +23,28 @@ from zndraw_auth import (
     UserRead,
     UserUpdate,
     auth_backend,
-    create_db_and_tables,
     current_active_user,
+    database_lifespan,
+    ensure_default_admin,
     fastapi_users,
+    get_auth_settings,
 )
+from zndraw_auth.db import Base
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_db_and_tables()
-    yield
+    async with database_lifespan(app):
+        # Create all tables
+        async with app.state.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        # Create default admin user
+        session_maker = async_sessionmaker(app.state.engine, expire_on_commit=False)
+        async with session_maker() as session:
+            await ensure_default_admin(session, get_auth_settings())
+
+        yield
 
 
 app = FastAPI(lifespan=lifespan)
@@ -130,7 +143,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/users/me
 
 ## Extending with Custom Models (e.g., zndraw-joblib)
 
-Other packages can import `Base` and `get_async_session` to define models that share the same database and have foreign key relationships to `User`.
+Other packages can import `Base` and `SessionDep` to define models that share the same database and have foreign key relationships to `User`.
 
 ### Example: Adding a Job model in zndraw-joblib
 
@@ -173,9 +186,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from zndraw_auth import User, current_active_user, get_async_session
+from zndraw_auth import SessionDep, User, current_active_user
 
 from .models import Job
 
@@ -186,7 +198,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 async def create_job(
     name: str,
     user: Annotated[User, Depends(current_active_user)],
-    session: Annotated[AsyncSession, Depends(get_async_session)],
+    session: SessionDep,
 ):
     """Create a new job for the current user."""
     job = Job(name=name, user_id=user.id)
@@ -199,7 +211,7 @@ async def create_job(
 @router.get("/")
 async def list_jobs(
     user: Annotated[User, Depends(current_active_user)],
-    session: Annotated[AsyncSession, Depends(get_async_session)],
+    session: SessionDep,
 ):
     """List all jobs for the current user."""
     result = await session.execute(
@@ -213,7 +225,7 @@ async def list_jobs(
 async def get_job(
     job_id: UUID,
     user: Annotated[User, Depends(current_active_user)],
-    session: Annotated[AsyncSession, Depends(get_async_session)],
+    session: SessionDep,
 ):
     """Get a specific job (must belong to current user)."""
     result = await session.execute(
@@ -232,23 +244,35 @@ async def get_job(
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from zndraw_auth import (
     UserCreate,
     UserRead,
     UserUpdate,
     auth_backend,
-    create_db_and_tables,
+    database_lifespan,
+    ensure_default_admin,
     fastapi_users,
+    get_auth_settings,
 )
+from zndraw_auth.db import Base
 from zndraw_joblib.routes import router as jobs_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Creates tables for User AND Job (all models using Base)
-    await create_db_and_tables()
-    yield
+    async with database_lifespan(app):
+        # Create all tables (User from zndraw-auth AND Job from zndraw-joblib)
+        async with app.state.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        # Create default admin user
+        session_maker = async_sessionmaker(app.state.engine, expire_on_commit=False)
+        async with session_maker() as session:
+            await ensure_default_admin(session, get_auth_settings())
+
+        yield
 
 
 app = FastAPI(lifespan=lifespan)
@@ -329,15 +353,25 @@ from zndraw_auth import (
     # User model
     User,
 
+    # Database lifecycle
+    database_lifespan,    # Context manager for engine lifecycle
+
+    # Database dependencies
+    get_engine,           # Retrieves engine from app.state
+    get_session_maker,    # Creates async_sessionmaker (primary override point)
+    get_session,          # Yields request-scoped session
+    SessionDep,           # Type alias for Annotated[AsyncSession, Depends(get_session)]
+    get_user_db,          # FastAPI-Users database adapter
+
     # Database utilities
-    create_db_and_tables,
-    get_async_session,
-    get_user_db,
+    create_engine_for_url,     # Factory for creating engines with appropriate pooling
+    ensure_default_admin,      # Create/promote default admin user
 
     # Pydantic schemas
     UserCreate,    # For registration (get_register_router)
     UserRead,      # For responses (all routers)
     UserUpdate,    # For profile updates (get_users_router)
+    TokenResponse, # JWT token response schema
 
     # Settings
     AuthSettings,

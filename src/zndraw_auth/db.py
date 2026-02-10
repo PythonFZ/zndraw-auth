@@ -133,13 +133,23 @@ async def get_session(
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-async def ensure_default_admin(settings: AuthSettings) -> None:
+async def ensure_default_admin(
+    session: AsyncSession,
+    settings: AuthSettings,
+) -> None:
     """Create or promote default admin user.
 
-    Called by host app during initialization.
+    Called by host app during initialization with a session.
     Idempotent - safe to call multiple times.
 
     If default_admin_email is None, runs in dev mode (all users are superusers).
+
+    Parameters
+    ----------
+    session : AsyncSession
+        Database session to use for operations.
+    settings : AuthSettings
+        Authentication settings with admin credentials.
     """
     if settings.default_admin_email is None:
         log.info("No default admin configured - running in dev mode")
@@ -152,42 +162,36 @@ async def ensure_default_admin(settings: AuthSettings) -> None:
         )
         return
 
-    # Create session_maker directly (outside request context)
-    engine = create_engine_for_url(settings.database_url)
-    session_maker = async_sessionmaker(engine, expire_on_commit=False)
     password_helper = PasswordHelper()
 
-    async with session_maker() as session:
-        # Check if user exists
-        result = await session.execute(
-            select(User).where(User.email == settings.default_admin_email)  # type: ignore[arg-type]
+    # Check if user exists
+    result = await session.execute(
+        select(User).where(User.email == settings.default_admin_email)  # type: ignore[arg-type]
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing is None:
+        # Create admin user
+        hashed = password_helper.hash(
+            settings.default_admin_password.get_secret_value()
         )
-        existing = result.scalar_one_or_none()
-
-        if existing is None:
-            # Create admin user
-            hashed = password_helper.hash(
-                settings.default_admin_password.get_secret_value()
-            )
-            admin = User(
-                email=settings.default_admin_email,
-                hashed_password=hashed,
-                is_active=True,
-                is_superuser=True,
-                is_verified=True,
-            )
-            session.add(admin)
-            await session.commit()
-            log.info(f"Created default admin user: {settings.default_admin_email}")
-        elif not existing.is_superuser:
-            # Promote to superuser
-            existing.is_superuser = True
-            await session.commit()
-            log.info(f"Promoted user to superuser: {settings.default_admin_email}")
-        else:
-            log.debug(f"Default admin already exists: {settings.default_admin_email}")
-
-    await engine.dispose()
+        admin = User(
+            email=settings.default_admin_email,
+            hashed_password=hashed,
+            is_active=True,
+            is_superuser=True,
+            is_verified=True,
+        )
+        session.add(admin)
+        await session.commit()
+        log.info(f"Created default admin user: {settings.default_admin_email}")
+    elif not existing.is_superuser:
+        # Promote to superuser
+        existing.is_superuser = True
+        await session.commit()
+        log.info(f"Promoted user to superuser: {settings.default_admin_email}")
+    else:
+        log.debug(f"Default admin already exists: {settings.default_admin_email}")
 
 
 async def get_user_db(
