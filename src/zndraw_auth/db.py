@@ -59,10 +59,9 @@ def create_engine_for_url(database_url: str) -> AsyncEngine:
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
-    elif database_url.startswith("sqlite"):
+    if database_url.startswith("sqlite"):
         return create_async_engine(database_url, poolclass=NullPool)
-    else:
-        return create_async_engine(database_url)
+    return create_async_engine(database_url)
 
 
 def get_engine(request: Request) -> AsyncEngine:

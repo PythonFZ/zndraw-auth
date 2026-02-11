@@ -14,9 +14,12 @@ Example usage in other packages:
         return {"user_id": str(user.id)}
 """
 
+import logging
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated
+
+log = logging.getLogger(__name__)
 
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
@@ -50,21 +53,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         """Called after successful registration."""
         if self.is_dev_mode and not user.is_superuser:
             await self.update(UserUpdate(is_superuser=True), user, safe=False)
-            print(f"User {user.id} has registered (granted superuser - dev mode).")
+            log.info("User %s has registered (granted superuser - dev mode).", user.id)
         else:
-            print(f"User {user.id} has registered.")
+            log.info("User %s has registered.", user.id)
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Request | None = None
     ) -> None:
         """Called after password reset requested."""
-        print(f"User {user.id} forgot password. Reset token: {token}")
+        log.debug("User %s requested password reset.", user.id)
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Request | None = None
     ) -> None:
         """Called after verification requested."""
-        print(f"Verification requested for {user.id}. Token: {token}")
+        log.debug("Verification requested for user %s.", user.id)
 
 
 async def get_user_manager(
