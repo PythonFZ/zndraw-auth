@@ -14,9 +14,12 @@ uv add zndraw-auth
 
 ```python
 from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from zndraw_auth import (
+    AuthSettings,
     User,
     UserCreate,
     UserRead,
@@ -24,28 +27,33 @@ from zndraw_auth import (
     auth_backend,
     create_engine_for_url,
     current_active_user,
-    database_lifespan,
     ensure_default_admin,
     fastapi_users,
-    get_auth_settings,
 )
 from zndraw_auth.db import Base
 
+settings = AuthSettings()
 engine = create_engine_for_url("sqlite+aiosqlite://")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with database_lifespan(app, engine):
-        # Create all tables
-        async with app.state.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # Store state for DI
+    app.state.engine = engine
+    app.state.session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    app.state.auth_settings = settings
 
-        # Create default admin user
-        async with app.state.session_maker() as session:
-            await ensure_default_admin(session, get_auth_settings())
+    # Create all tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-        yield
+    # Create default admin user
+    async with app.state.session_maker() as session:
+        await ensure_default_admin(session, settings)
+
+    yield
+
+    await engine.dispose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -245,36 +253,43 @@ async def get_job(
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from zndraw_auth import (
+    AuthSettings,
     UserCreate,
     UserRead,
     UserUpdate,
     auth_backend,
     create_engine_for_url,
-    database_lifespan,
     ensure_default_admin,
     fastapi_users,
-    get_auth_settings,
 )
 from zndraw_auth.db import Base
 from zndraw_joblib.routes import router as jobs_router
 
+settings = AuthSettings()
 engine = create_engine_for_url("sqlite+aiosqlite:///./zndraw.db")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with database_lifespan(app, engine):
-        # Create all tables (User from zndraw-auth AND Job from zndraw-joblib)
-        async with app.state.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # Store state for DI
+    app.state.engine = engine
+    app.state.session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    app.state.auth_settings = settings
 
-        # Create default admin user
-        async with app.state.session_maker() as session:
-            await ensure_default_admin(session, get_auth_settings())
+    # Create all tables (User from zndraw-auth AND Job from zndraw-joblib)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-        yield
+    # Create default admin user
+    async with app.state.session_maker() as session:
+        await ensure_default_admin(session, settings)
+
+    yield
+
+    await engine.dispose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -313,7 +328,7 @@ Settings are loaded from environment variables with the `ZNDRAW_AUTH_` prefix:
 | `ZNDRAW_AUTH_DEFAULT_ADMIN_EMAIL` | `None` | Email for the default admin user |
 | `ZNDRAW_AUTH_DEFAULT_ADMIN_PASSWORD` | `None` | Password for the default admin user |
 
-**Note:** The database URL is not configured here — the host application creates the engine and passes it to `database_lifespan`. Use `create_engine_for_url()` for automatic pool selection.
+**Note:** The database URL is not configured here — the host application creates the engine and stores it in `app.state`. Use `create_engine_for_url()` for automatic pool selection.
 
 ### Dev Mode vs Production Mode
 
@@ -344,18 +359,15 @@ from zndraw_auth import (
     # User model
     User,
 
-    # Database lifecycle
-    database_lifespan,    # Context manager for engine lifecycle
-
-    # Database dependencies
+    # Database dependencies (read from app.state)
     get_engine,           # Retrieves engine from app.state
-    get_session_maker,    # Creates async_sessionmaker (primary override point)
+    get_session_maker,    # Retrieves async_sessionmaker from app.state
     get_session,          # Yields request-scoped session
-    SessionDep,           # Type alias for Annotated[AsyncSession, Depends(get_session)]
+    SessionDep,           # Type alias: Annotated[AsyncSession, Depends(get_session)]
     get_user_db,          # FastAPI-Users database adapter
 
     # Database utilities
-    create_engine_for_url,     # Factory for creating engines with appropriate pooling
+    create_engine_for_url,     # Factory for engines with automatic pool selection
     ensure_default_admin,      # Create/promote default admin user
 
     # Pydantic schemas
@@ -365,8 +377,9 @@ from zndraw_auth import (
     TokenResponse, # JWT token response schema
 
     # Settings
-    AuthSettings,
-    get_auth_settings,
+    AuthSettings,          # Pydantic settings model
+    AuthSettingsDep,       # Type alias: Annotated[AuthSettings, Depends(get_auth_settings)]
+    get_auth_settings,     # Retrieves settings from app.state
 
     # User manager (for custom lifecycle hooks)
     UserManager,

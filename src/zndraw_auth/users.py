@@ -19,8 +19,6 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
-log = logging.getLogger(__name__)
-
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.authentication import (
@@ -33,6 +31,8 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 from zndraw_auth.db import User, get_user_db
 from zndraw_auth.schemas import UserUpdate
 from zndraw_auth.settings import AuthSettings, get_auth_settings
+
+log = logging.getLogger(__name__)
 
 # --- User Manager ---
 
