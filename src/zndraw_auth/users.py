@@ -19,7 +19,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.authentication import (
     AuthenticationBackend,
@@ -27,8 +27,11 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
+import jwt as pyjwt
+from fastapi_users.jwt import decode_jwt
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from zndraw_auth.db import User, get_user_db
+from zndraw_auth.db import User, get_session_maker, get_user_db
 from zndraw_auth.schemas import UserUpdate
 from zndraw_auth.settings import AuthSettings, get_auth_settings
 
@@ -147,3 +150,55 @@ Usage:
     async def route(user: User | None = Depends(current_optional_user)):
         ...
 """
+
+
+# --- Scoped-Session Auth ---
+
+
+async def current_user_scoped_session(
+    session_maker: Annotated[
+        async_sessionmaker[AsyncSession], Depends(get_session_maker)
+    ],
+    strategy: Annotated[JWTStrategy, Depends(get_jwt_strategy)],  # type: ignore[type-arg]
+    token: str | None = Depends(bearer_transport.scheme),
+) -> User:
+    """Resolve current active user with a short-lived session.
+
+    Unlike ``current_active_user``, the database session is opened only
+    for the user lookup and closed before returning.  This prevents
+    holding the SQLite ``asyncio.Lock`` during long-polling endpoint
+    bodies.
+
+    Use this in endpoints that long-poll or hold connections open.
+    """
+    if token is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        data = decode_jwt(
+            token,
+            secret=strategy.decode_key,
+            audience=strategy.token_audience,
+            algorithms=[strategy.algorithm],
+        )
+    except pyjwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_id_raw = data.get("sub")
+    if user_id_raw is None:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    try:
+        user_id = uuid.UUID(user_id_raw)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    async with session_maker() as session:
+        user = await session.get(User, user_id)
+        if user is not None:
+            session.expunge(user)
+
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    return user

@@ -21,6 +21,7 @@ from zndraw_auth import (
     current_active_user,
     current_optional_user,
     current_superuser,
+    current_user_scoped_session,
     ensure_default_admin,
     fastapi_users,
 )
@@ -164,6 +165,13 @@ async def _create_test_app(
         result = await session.execute(text("SELECT 1"))
         value = result.scalar()
         return {"db_check": str(value)}
+
+    @app.get("/test/scoped-session")
+    async def scoped_session_route(
+        user: Annotated[User, Depends(current_user_scoped_session)],
+    ) -> dict[str, str]:
+        """Route using scoped-session auth (session closed before return)."""
+        return {"user_id": str(user.id), "email": user.email}
 
     return app
 

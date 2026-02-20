@@ -43,6 +43,7 @@ from zndraw_auth.users import (
     current_active_user,
     current_optional_user,
     current_superuser,
+    current_user_scoped_session,
     fastapi_users,
     get_user_manager,
 )
@@ -81,4 +82,5 @@ __all__ = [
     "current_active_user",
     "current_superuser",
     "current_optional_user",
+    "current_user_scoped_session",
 ]
