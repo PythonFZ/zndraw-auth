@@ -24,7 +24,9 @@ from zndraw_auth import (
     UserCreate,
     UserRead,
     UserUpdate,
+    admin_token_router,
     auth_backend,
+    cli_login_router,
     create_engine_for_url,
     current_active_user,
     ensure_default_admin,
@@ -74,6 +76,8 @@ app.include_router(
     prefix="/users",
     tags=["users"],
 )
+app.include_router(cli_login_router, prefix="/auth/cli-login", tags=["auth"])
+app.include_router(admin_token_router, prefix="/admin", tags=["admin"])
 
 
 @app.get("/protected")
@@ -149,6 +153,47 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/users/me
 #   "is_verified": false
 # }
 ```
+
+### CLI Login Router (Device-Code Flow)
+
+```python
+from zndraw_auth import cli_login_router
+
+app.include_router(cli_login_router, prefix="/auth/cli-login", tags=["auth"])
+```
+
+**Provides:**
+- `POST /auth/cli-login` - Create a login challenge (no auth required). Returns `{code, secret, approve_url}`
+- `GET /auth/cli-login/{code}?secret=...` - Poll challenge status (no auth, secret required). Returns `{status, token}`
+- `PATCH /auth/cli-login/{code}` - Approve challenge (browser user, auth required). Mints JWT for the approving user
+- `DELETE /auth/cli-login/{code}` - Reject challenge (auth required)
+
+**Flow:** A CLI creates a challenge, displays the code to the user, and polls for approval. The user opens a browser, authenticates, and approves the code. The CLI then retrieves a JWT that authenticates as the browser user.
+
+**Security:**
+- Tokens are one-time retrieval (nulled after first poll)
+- Challenges expire after 5 minutes
+- The secret prevents unauthorized polling
+- Redeemed challenges are kept for audit (sensitive fields nulled)
+
+### Admin Token Minting Router
+
+```python
+from zndraw_auth import admin_token_router
+
+app.include_router(admin_token_router, prefix="/admin", tags=["admin"])
+```
+
+**Provides:**
+- `POST /admin/users/{user_id}/token` - Mint a JWT for any user (superuser only). Returns `{access_token, token_type}`
+
+**Use case:** Automation and CI pipelines where a superuser needs to generate tokens for other users without their credentials.
+
+**Safeguards:**
+- Superuser-only (`current_superuser` dependency)
+- Target user must exist and be active
+- Minted JWT includes `impersonated_by` claim with admin's UUID for audit
+- Server-side logging of all token minting events
 
 ## Extending with Custom Models (e.g., zndraw-joblib)
 
@@ -260,7 +305,9 @@ from zndraw_auth import (
     UserCreate,
     UserRead,
     UserUpdate,
+    admin_token_router,
     auth_backend,
+    cli_login_router,
     create_engine_for_url,
     ensure_default_admin,
     fastapi_users,
@@ -310,6 +357,10 @@ app.include_router(
     prefix="/users",
     tags=["users"],
 )
+
+# CLI login + admin routes from zndraw-auth
+app.include_router(cli_login_router, prefix="/auth/cli-login", tags=["auth"])
+app.include_router(admin_token_router, prefix="/admin", tags=["admin"])
 
 # Job routes from zndraw-joblib
 app.include_router(jobs_router)
@@ -388,6 +439,18 @@ from zndraw_auth import (
     # FastAPIUsers instance (for including routers)
     fastapi_users,
     auth_backend,
+
+    # Pre-built routers
+    cli_login_router,       # Device-code CLI login flow
+    admin_token_router,     # Superuser token minting
+
+    # CLI login model
+    CLILoginChallenge,      # SQLModel table for login challenges
+
+    # CLI login / admin schemas
+    CLILoginCreateResponse,       # POST /auth/cli-login response
+    CLILoginStatusResponse,       # GET /auth/cli-login/{code} response
+    ImpersonationTokenResponse,   # POST /admin/users/{id}/token response
 
     # Dependencies for Depends()
     current_active_user,    # Requires authenticated active user
