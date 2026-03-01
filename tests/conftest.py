@@ -25,6 +25,7 @@ from zndraw_auth import (
     ensure_default_admin,
     fastapi_users,
 )
+from zndraw_auth.admin import admin_token_router
 from zndraw_auth.cli_login import cli_login_router
 from zndraw_auth.db import Base
 from zndraw_auth.settings import AuthSettings
@@ -134,6 +135,7 @@ async def _create_test_app(
         tags=["users"],
     )
     app.include_router(cli_login_router, prefix="/auth/cli-login", tags=["auth"])
+    app.include_router(admin_token_router, prefix="/admin", tags=["admin"])
 
     # Test routes for dependency injection
     @app.get("/test/protected")
