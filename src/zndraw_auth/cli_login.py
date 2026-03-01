@@ -3,13 +3,18 @@
 import logging
 import secrets
 import string
+import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+import jwt as pyjwt
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 
-from zndraw_auth.db import CLILoginChallenge, SessionDep
+from zndraw_auth.db import CLILoginChallenge, SessionDep, User
 from zndraw_auth.schemas import CLILoginCreateResponse, CLILoginStatusResponse
+from zndraw_auth.settings import AuthSettings, get_auth_settings
+from zndraw_auth.users import current_active_user
 
 log = logging.getLogger(__name__)
 
@@ -83,3 +88,66 @@ async def poll_cli_login_challenge(
         return CLILoginStatusResponse(status="approved", token=token)
 
     return CLILoginStatusResponse(status="pending")
+
+
+def _mint_jwt(
+    user_id: uuid.UUID,
+    secret: str,
+    lifetime_seconds: int,
+    *,
+    extra_claims: dict | None = None,
+) -> str:
+    """Mint a JWT compatible with fastapi-users JWTStrategy."""
+    now = datetime.now(UTC)
+    payload: dict = {
+        "sub": str(user_id),
+        "aud": "fastapi-users:auth",
+        "iat": now,
+        "exp": now + timedelta(seconds=lifetime_seconds),
+    }
+    if extra_claims:
+        payload.update(extra_claims)
+    return pyjwt.encode(payload, secret, algorithm="HS256")
+
+
+@cli_login_router.patch("/{code}", status_code=200)
+async def approve_cli_login_challenge(
+    code: str,
+    user: Annotated[User, Depends(current_active_user)],
+    settings: Annotated[AuthSettings, Depends(get_auth_settings)],
+    session: SessionDep,
+) -> dict[str, str]:
+    """Approve a CLI login challenge (browser user, auth required)."""
+    result = await session.execute(
+        select(CLILoginChallenge).where(
+            CLILoginChallenge.code == code
+        )
+    )
+    challenge = result.scalar_one_or_none()
+
+    if challenge is None or challenge.status != "pending":
+        raise HTTPException(
+            status_code=404, detail="Challenge not found"
+        )
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if now > challenge.expires_at:
+        raise HTTPException(
+            status_code=410, detail="Challenge expired"
+        )
+
+    token = _mint_jwt(
+        user_id=user.id,
+        secret=settings.secret_key.get_secret_value(),
+        lifetime_seconds=settings.token_lifetime_seconds,
+    )
+
+    challenge.token = token
+    challenge.user_id = user.id
+    challenge.status = "approved"
+    await session.commit()
+
+    log.info(
+        "CLI login approved: user %s, code %s", user.id, code
+    )
+    return {"status": "approved"}

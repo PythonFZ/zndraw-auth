@@ -3,6 +3,8 @@
 import pytest
 from httpx import AsyncClient
 
+from zndraw_auth import TokenResponse, UserCreate
+
 
 @pytest.mark.asyncio
 async def test_create_cli_login_challenge(client: AsyncClient) -> None:
@@ -52,3 +54,104 @@ async def test_poll_nonexistent_code(client: AsyncClient) -> None:
         params={"secret": "doesnt-matter"},
     )
     assert response.status_code == 404
+
+
+async def _get_auth_header(
+    client: AsyncClient, email: str, password: str
+) -> dict[str, str]:
+    """Register, login, return auth header."""
+    user_data = UserCreate(email=email, password=password)
+    await client.post("/auth/register", json=user_data.model_dump())
+    response = await client.post(
+        "/auth/jwt/login",
+        data={
+            "username": email,
+            "password": password,
+            "grant_type": "password",
+        },
+    )
+    token = TokenResponse.model_validate(response.json())
+    return {"Authorization": f"Bearer {token.access_token}"}
+
+
+@pytest.mark.asyncio
+async def test_approve_challenge(client: AsyncClient) -> None:
+    """PATCH /auth/cli-login/{code} approves and mints a token."""
+    create = await client.post("/auth/cli-login")
+    data = create.json()
+
+    headers = await _get_auth_header(
+        client, "cli-user@test.com", "password123"
+    )
+    response = await client.patch(
+        f"/auth/cli-login/{data['code']}",
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_approve_requires_auth(client: AsyncClient) -> None:
+    """PATCH /auth/cli-login/{code} without auth returns 401."""
+    create = await client.post("/auth/cli-login")
+    data = create.json()
+
+    response = await client.patch(f"/auth/cli-login/{data['code']}")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_full_cli_login_flow(client: AsyncClient) -> None:
+    """Full flow: create -> approve -> poll gets token -> token works."""
+    create = await client.post("/auth/cli-login")
+    challenge = create.json()
+
+    headers = await _get_auth_header(
+        client, "browser@test.com", "password123"
+    )
+    approve = await client.patch(
+        f"/auth/cli-login/{challenge['code']}",
+        headers=headers,
+    )
+    assert approve.status_code == 200
+
+    poll = await client.get(
+        f"/auth/cli-login/{challenge['code']}",
+        params={"secret": challenge["secret"]},
+    )
+    assert poll.status_code == 200
+    poll_data = poll.json()
+    assert poll_data["status"] == "approved"
+    assert poll_data["token"] is not None
+
+    cli_headers = {"Authorization": f"Bearer {poll_data['token']}"}
+    me = await client.get("/test/protected", headers=cli_headers)
+    assert me.status_code == 200
+    assert me.json()["email"] == "browser@test.com"
+
+
+@pytest.mark.asyncio
+async def test_poll_after_redeem_returns_404(client: AsyncClient) -> None:
+    """Second poll after redeem returns 404 (one-time retrieval)."""
+    create = await client.post("/auth/cli-login")
+    challenge = create.json()
+    headers = await _get_auth_header(
+        client, "redeem@test.com", "password123"
+    )
+    await client.patch(
+        f"/auth/cli-login/{challenge['code']}",
+        headers=headers,
+    )
+
+    poll1 = await client.get(
+        f"/auth/cli-login/{challenge['code']}",
+        params={"secret": challenge["secret"]},
+    )
+    assert poll1.status_code == 200
+    assert poll1.json()["status"] == "approved"
+
+    poll2 = await client.get(
+        f"/auth/cli-login/{challenge['code']}",
+        params={"secret": challenge["secret"]},
+    )
+    assert poll2.status_code == 404
