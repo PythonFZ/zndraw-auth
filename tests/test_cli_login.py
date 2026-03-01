@@ -214,6 +214,26 @@ async def test_poll_expired_challenge(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_routers_importable_from_package() -> None:
+    """cli_login_router and admin_token_router are importable from zndraw_auth."""
+    from zndraw_auth import (
+        CLILoginChallenge,
+        CLILoginCreateResponse,
+        CLILoginStatusResponse,
+        ImpersonationTokenResponse,
+        admin_token_router,
+        cli_login_router,
+    )
+
+    assert cli_login_router is not None
+    assert admin_token_router is not None
+    assert CLILoginChallenge is not None
+    assert CLILoginCreateResponse is not None
+    assert CLILoginStatusResponse is not None
+    assert ImpersonationTokenResponse is not None
+
+
+@pytest.mark.asyncio
 async def test_approve_expired_challenge(client: AsyncClient) -> None:
     """PATCH /auth/cli-login/{code} returns 410 when challenge is expired."""
     create = await client.post("/auth/cli-login")

@@ -24,8 +24,11 @@ Example usage:
         return {"user_id": str(user.id)}
 """
 
+from zndraw_auth.admin import admin_token_router
+from zndraw_auth.cli_login import cli_login_router
 from zndraw_auth.db import (
     Base,
+    CLILoginChallenge,
     SessionDep,
     User,
     create_engine_for_url,
@@ -35,7 +38,15 @@ from zndraw_auth.db import (
     get_session_maker,
     get_user_db,
 )
-from zndraw_auth.schemas import TokenResponse, UserCreate, UserRead, UserUpdate
+from zndraw_auth.schemas import (
+    CLILoginCreateResponse,
+    CLILoginStatusResponse,
+    ImpersonationTokenResponse,
+    TokenResponse,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+)
 from zndraw_auth.settings import AuthSettings, AuthSettingsDep, get_auth_settings
 from zndraw_auth.users import (
     UserManager,
@@ -53,6 +64,8 @@ __all__ = [
     "Base",
     # User model
     "User",
+    # Database models
+    "CLILoginChallenge",
     # Database dependencies
     "get_engine",
     "get_session_maker",
@@ -67,10 +80,16 @@ __all__ = [
     "UserRead",
     "UserUpdate",
     "TokenResponse",
+    "CLILoginCreateResponse",
+    "CLILoginStatusResponse",
+    "ImpersonationTokenResponse",
     # Settings
     "AuthSettings",
     "AuthSettingsDep",
     "get_auth_settings",
+    # Routers
+    "cli_login_router",
+    "admin_token_router",
     # User manager
     "UserManager",
     "get_user_manager",
