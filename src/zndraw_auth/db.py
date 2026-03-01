@@ -3,6 +3,7 @@
 import logging
 import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -17,7 +18,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool, StaticPool
-from sqlmodel import SQLModel
+from sqlmodel import Field, SQLModel
 
 from zndraw_auth.settings import AuthSettings
 
@@ -43,6 +44,23 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     """
 
     pass
+
+
+class CLILoginChallenge(SQLModel, table=True):
+    """Challenge for device-code style CLI login flow.
+
+    Lifecycle: pending -> approved -> redeemed
+    On redeem: token and secret are nulled, row kept for audit.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True)
+    secret: str | None = None
+    status: str = "pending"
+    token: str | None = None
+    user_id: uuid.UUID | None = Field(default=None, foreign_key="user.id")
+    created_at: datetime
+    expires_at: datetime
 
 
 def create_engine_for_url(database_url: str) -> AsyncEngine:

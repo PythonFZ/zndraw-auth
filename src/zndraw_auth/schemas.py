@@ -40,3 +40,25 @@ class TokenResponse(BaseModel):
 
     access_token: str
     token_type: str
+
+
+class CLILoginCreateResponse(BaseModel):
+    """Response from creating a CLI login challenge."""
+
+    code: str
+    secret: str
+    approve_url: str
+
+
+class CLILoginStatusResponse(BaseModel):
+    """Response from polling a CLI login challenge."""
+
+    status: str
+    token: str | None = None
+
+
+class ImpersonationTokenResponse(BaseModel):
+    """Response from admin token minting."""
+
+    access_token: str
+    token_type: str = "bearer"
