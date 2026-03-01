@@ -1,5 +1,8 @@
 """Tests for CLI login (device-code) flow."""
 
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
+
 import pytest
 from httpx import AsyncClient
 
@@ -189,3 +192,41 @@ async def test_reject_requires_auth(client: AsyncClient) -> None:
         f"/auth/cli-login/{challenge['code']}"
     )
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_poll_expired_challenge(client: AsyncClient) -> None:
+    """GET /auth/cli-login/{code} returns 410 when challenge is expired."""
+    # Create challenge (stores real timestamps)
+    create = await client.post("/auth/cli-login")
+    challenge = create.json()
+
+    # Mock datetime.now to return future time for the poll
+    future = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
+    with patch("zndraw_auth.cli_login.datetime") as mock_dt:
+        mock_dt.now.return_value = future
+
+        response = await client.get(
+            f"/auth/cli-login/{challenge['code']}",
+            params={"secret": challenge["secret"]},
+        )
+    assert response.status_code == 410
+
+
+@pytest.mark.asyncio
+async def test_approve_expired_challenge(client: AsyncClient) -> None:
+    """PATCH /auth/cli-login/{code} returns 410 when challenge is expired."""
+    create = await client.post("/auth/cli-login")
+    challenge = create.json()
+
+    headers = await _get_auth_header(client, "expired@test.com", "password123")
+
+    future = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
+    with patch("zndraw_auth.cli_login.datetime") as mock_dt:
+        mock_dt.now.return_value = future
+
+        response = await client.patch(
+            f"/auth/cli-login/{challenge['code']}",
+            headers=headers,
+        )
+    assert response.status_code == 410
