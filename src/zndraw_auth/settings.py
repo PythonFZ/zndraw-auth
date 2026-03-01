@@ -28,7 +28,7 @@ class AuthSettings(BaseSettings):
     )
 
     # JWT settings
-    secret_key: SecretStr = SecretStr("CHANGE-ME-IN-PRODUCTION")
+    secret_key: SecretStr = SecretStr("CHANGE-ME-IN-PRODUCTION-SECRET!")
     token_lifetime_seconds: int = 3600  # 1 hour
 
     # Password reset / verification tokens
