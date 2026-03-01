@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import jwt as pyjwt
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 
 from zndraw_auth.db import CLILoginChallenge, SessionDep, User
@@ -151,3 +151,31 @@ async def approve_cli_login_challenge(
         "CLI login approved: user %s, code %s", user.id, code
     )
     return {"status": "approved"}
+
+
+@cli_login_router.delete("/{code}", status_code=204)
+async def reject_cli_login_challenge(
+    code: str,
+    user: Annotated[User, Depends(current_active_user)],
+    session: SessionDep,
+) -> Response:
+    """Reject a CLI login challenge (browser user, auth required)."""
+    result = await session.execute(
+        select(CLILoginChallenge).where(
+            CLILoginChallenge.code == code
+        )
+    )
+    challenge = result.scalar_one_or_none()
+
+    if challenge is None:
+        raise HTTPException(
+            status_code=404, detail="Challenge not found"
+        )
+
+    await session.delete(challenge)
+    await session.commit()
+
+    log.info(
+        "CLI login rejected: by user %s, code %s", user.id, code
+    )
+    return Response(status_code=204)

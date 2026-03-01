@@ -155,3 +155,37 @@ async def test_poll_after_redeem_returns_404(client: AsyncClient) -> None:
         params={"secret": challenge["secret"]},
     )
     assert poll2.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_reject_challenge(client: AsyncClient) -> None:
+    """DELETE /auth/cli-login/{code} rejects, subsequent poll returns 404."""
+    create = await client.post("/auth/cli-login")
+    challenge = create.json()
+
+    headers = await _get_auth_header(
+        client, "rejector@test.com", "password123"
+    )
+    response = await client.delete(
+        f"/auth/cli-login/{challenge['code']}",
+        headers=headers,
+    )
+    assert response.status_code == 204
+
+    poll = await client.get(
+        f"/auth/cli-login/{challenge['code']}",
+        params={"secret": challenge["secret"]},
+    )
+    assert poll.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_reject_requires_auth(client: AsyncClient) -> None:
+    """DELETE /auth/cli-login/{code} without auth returns 401."""
+    create = await client.post("/auth/cli-login")
+    challenge = create.json()
+
+    response = await client.delete(
+        f"/auth/cli-login/{challenge['code']}"
+    )
+    assert response.status_code == 401
