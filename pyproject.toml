@@ -1,6 +1,6 @@
 [project]
 name = "zndraw-auth"
-version = "0.2.3"
+dynamic = ["version"]
 description = "Shared authentication for ZnDraw using fastapi-users"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,8 +23,14 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.9.28,<0.10.0"]
-build-backend = "uv_build"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/zndraw_auth/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/zndraw_auth"]

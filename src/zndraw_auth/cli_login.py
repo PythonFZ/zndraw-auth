@@ -119,22 +119,16 @@ async def approve_cli_login_challenge(
 ) -> dict[str, str]:
     """Approve a CLI login challenge (browser user, auth required)."""
     result = await session.execute(
-        select(CLILoginChallenge).where(
-            CLILoginChallenge.code == code
-        )
+        select(CLILoginChallenge).where(CLILoginChallenge.code == code)
     )
     challenge = result.scalar_one_or_none()
 
     if challenge is None or challenge.status != "pending":
-        raise HTTPException(
-            status_code=404, detail="Challenge not found"
-        )
+        raise HTTPException(status_code=404, detail="Challenge not found")
 
     now = datetime.now(UTC).replace(tzinfo=None)
     if now > challenge.expires_at:
-        raise HTTPException(
-            status_code=410, detail="Challenge expired"
-        )
+        raise HTTPException(status_code=410, detail="Challenge expired")
 
     token = _mint_jwt(
         user_id=user.id,
@@ -147,9 +141,7 @@ async def approve_cli_login_challenge(
     challenge.status = "approved"
     await session.commit()
 
-    log.info(
-        "CLI login approved: user %s, code %s", user.id, code
-    )
+    log.info("CLI login approved: user %s, code %s", user.id, code)
     return {"status": "approved"}
 
 
@@ -161,21 +153,15 @@ async def reject_cli_login_challenge(
 ) -> Response:
     """Reject a CLI login challenge (browser user, auth required)."""
     result = await session.execute(
-        select(CLILoginChallenge).where(
-            CLILoginChallenge.code == code
-        )
+        select(CLILoginChallenge).where(CLILoginChallenge.code == code)
     )
     challenge = result.scalar_one_or_none()
 
     if challenge is None:
-        raise HTTPException(
-            status_code=404, detail="Challenge not found"
-        )
+        raise HTTPException(status_code=404, detail="Challenge not found")
 
     await session.delete(challenge)
     await session.commit()
 
-    log.info(
-        "CLI login rejected: by user %s, code %s", user.id, code
-    )
+    log.info("CLI login rejected: by user %s, code %s", user.id, code)
     return Response(status_code=204)

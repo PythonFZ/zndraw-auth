@@ -83,9 +83,7 @@ async def test_approve_challenge(client: AsyncClient) -> None:
     create = await client.post("/auth/cli-login")
     data = create.json()
 
-    headers = await _get_auth_header(
-        client, "cli-user@test.com", "password123"
-    )
+    headers = await _get_auth_header(client, "cli-user@test.com", "password123")
     response = await client.patch(
         f"/auth/cli-login/{data['code']}",
         headers=headers,
@@ -109,9 +107,7 @@ async def test_full_cli_login_flow(client: AsyncClient) -> None:
     create = await client.post("/auth/cli-login")
     challenge = create.json()
 
-    headers = await _get_auth_header(
-        client, "browser@test.com", "password123"
-    )
+    headers = await _get_auth_header(client, "browser@test.com", "password123")
     approve = await client.patch(
         f"/auth/cli-login/{challenge['code']}",
         headers=headers,
@@ -138,9 +134,7 @@ async def test_poll_after_redeem_returns_404(client: AsyncClient) -> None:
     """Second poll after redeem returns 404 (one-time retrieval)."""
     create = await client.post("/auth/cli-login")
     challenge = create.json()
-    headers = await _get_auth_header(
-        client, "redeem@test.com", "password123"
-    )
+    headers = await _get_auth_header(client, "redeem@test.com", "password123")
     await client.patch(
         f"/auth/cli-login/{challenge['code']}",
         headers=headers,
@@ -166,9 +160,7 @@ async def test_reject_challenge(client: AsyncClient) -> None:
     create = await client.post("/auth/cli-login")
     challenge = create.json()
 
-    headers = await _get_auth_header(
-        client, "rejector@test.com", "password123"
-    )
+    headers = await _get_auth_header(client, "rejector@test.com", "password123")
     response = await client.delete(
         f"/auth/cli-login/{challenge['code']}",
         headers=headers,
@@ -188,9 +180,7 @@ async def test_reject_requires_auth(client: AsyncClient) -> None:
     create = await client.post("/auth/cli-login")
     challenge = create.json()
 
-    response = await client.delete(
-        f"/auth/cli-login/{challenge['code']}"
-    )
+    response = await client.delete(f"/auth/cli-login/{challenge['code']}")
     assert response.status_code == 401
 
 

@@ -19,6 +19,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
+import jwt as pyjwt
 from fastapi import Depends, HTTPException, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.authentication import (
@@ -27,7 +28,6 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
-import jwt as pyjwt
 from fastapi_users.jwt import decode_jwt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -182,7 +182,7 @@ async def current_user_scoped_session(
             algorithms=[strategy.algorithm],
         )
     except pyjwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token") from None
 
     user_id_raw = data.get("sub")
     if user_id_raw is None:
@@ -191,7 +191,7 @@ async def current_user_scoped_session(
     try:
         user_id = uuid.UUID(user_id_raw)
     except (ValueError, AttributeError):
-        raise HTTPException(status_code=401, detail="Invalid token payload")
+        raise HTTPException(status_code=401, detail="Invalid token payload") from None
 
     async with session_maker() as session:
         user = await session.get(User, user_id)
