@@ -63,7 +63,11 @@ async def test_scoped_session_expired_token(client: AsyncClient) -> None:
     import jwt as pyjwt
 
     expired = pyjwt.encode(
-        {"sub": "00000000-0000-0000-0000-000000000000", "aud": "fastapi-users:auth", "exp": 0},
+        {
+            "sub": "00000000-0000-0000-0000-000000000000",
+            "aud": "fastapi-users:auth",
+            "exp": 0,
+        },
         "test-secret-key",
         algorithm="HS256",
     )

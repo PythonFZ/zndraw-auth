@@ -982,7 +982,6 @@ wheels = [
 
 [[package]]
 name = "zndraw-auth"
-version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
