@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 from pydantic import SecretStr, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 
 class AuthSettings(BaseSettings):
@@ -25,6 +29,7 @@ class AuthSettings(BaseSettings):
         env_prefix="ZNDRAW_AUTH_",
         env_file=".env",
         extra="ignore",
+        pyproject_toml_table_header=("tool", "zndraw", "auth"),
     )
 
     # JWT settings
@@ -41,6 +46,28 @@ class AuthSettings(BaseSettings):
 
     default_admin_password: SecretStr | None = None
     """Password for the default admin user."""
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,  # noqa: ARG003
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Add pyproject.toml as a configuration source.
+
+        Priority (highest to lowest): init, env vars, dotenv, pyproject.toml.
+        """
+        from pydantic_settings import PyprojectTomlConfigSettingsSource  # noqa: PLC0415
+
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            PyprojectTomlConfigSettingsSource(settings_cls),
+        )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
