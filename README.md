@@ -225,7 +225,9 @@ class Job(Base):
     status: Mapped[str] = mapped_column(String(50), default="pending")
 
     # Foreign key to User from zndraw-auth (cascade delete when user is deleted)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id", ondelete="cascade"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="cascade")
+    )
 
     # Relationship (optional, for ORM navigation)
     user: Mapped["User"] = relationship("User", lazy="selectin")
@@ -268,9 +270,7 @@ async def list_jobs(
     session: SessionDep,
 ):
     """List all jobs for the current user."""
-    result = await session.execute(
-        select(Job).where(Job.user_id == user.id)
-    )
+    result = await session.execute(select(Job).where(Job.user_id == user.id))
     jobs = result.scalars().all()
     return [{"id": str(j.id), "name": j.name, "status": j.status} for j in jobs]
 
@@ -406,55 +406,44 @@ export ZNDRAW_AUTH_DEFAULT_ADMIN_PASSWORD=secure-password
 from zndraw_auth import (
     # SQLAlchemy Base (for extending with your own models)
     Base,
-
     # User model
     User,
-
     # Database dependencies (read from app.state)
-    get_engine,           # Retrieves engine from app.state
-    get_session_maker,    # Retrieves async_sessionmaker from app.state
-    get_session,          # Yields request-scoped session
-    SessionDep,           # Type alias: Annotated[AsyncSession, Depends(get_session)]
-    get_user_db,          # FastAPI-Users database adapter
-
+    get_engine,  # Retrieves engine from app.state
+    get_session_maker,  # Retrieves async_sessionmaker from app.state
+    get_session,  # Yields request-scoped session
+    SessionDep,  # Type alias: Annotated[AsyncSession, Depends(get_session)]
+    get_user_db,  # FastAPI-Users database adapter
     # Database utilities
-    create_engine_for_url,     # Factory for engines with automatic pool selection
-    ensure_default_admin,      # Create/promote default admin user
-
+    create_engine_for_url,  # Factory for engines with automatic pool selection
+    ensure_default_admin,  # Create/promote default admin user
     # Pydantic schemas
-    UserCreate,    # For registration (get_register_router)
-    UserRead,      # For responses (all routers)
-    UserUpdate,    # For profile updates (get_users_router)
-    TokenResponse, # JWT token response schema
-
+    UserCreate,  # For registration (get_register_router)
+    UserRead,  # For responses (all routers)
+    UserUpdate,  # For profile updates (get_users_router)
+    TokenResponse,  # JWT token response schema
     # Settings
-    AuthSettings,          # Pydantic settings model
-    AuthSettingsDep,       # Type alias: Annotated[AuthSettings, Depends(get_auth_settings)]
-    get_auth_settings,     # Retrieves settings from app.state
-
+    AuthSettings,  # Pydantic settings model
+    AuthSettingsDep,  # Type alias: Annotated[AuthSettings, Depends(get_auth_settings)]
+    get_auth_settings,  # Retrieves settings from app.state
     # User manager (for custom lifecycle hooks)
     UserManager,
     get_user_manager,
-
     # FastAPIUsers instance (for including routers)
     fastapi_users,
     auth_backend,
-
     # Pre-built routers
-    cli_login_router,       # Device-code CLI login flow
-    admin_token_router,     # Superuser token minting
-
+    cli_login_router,  # Device-code CLI login flow
+    admin_token_router,  # Superuser token minting
     # CLI login model
-    CLILoginChallenge,      # SQLModel table for login challenges
-
+    CLILoginChallenge,  # SQLModel table for login challenges
     # CLI login / admin schemas
-    CLILoginCreateResponse,       # POST /auth/cli-login response
-    CLILoginStatusResponse,       # GET /auth/cli-login/{code} response
-    ImpersonationTokenResponse,   # POST /admin/users/{id}/token response
-
+    CLILoginCreateResponse,  # POST /auth/cli-login response
+    CLILoginStatusResponse,  # GET /auth/cli-login/{code} response
+    ImpersonationTokenResponse,  # POST /admin/users/{id}/token response
     # Dependencies for Depends()
-    current_active_user,    # Requires authenticated active user
-    current_superuser,      # Requires superuser
+    current_active_user,  # Requires authenticated active user
+    current_superuser,  # Requires superuser
     current_optional_user,  # User | None (optional auth)
 )
 ```
