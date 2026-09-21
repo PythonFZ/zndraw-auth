@@ -970,13 +970,13 @@ Replace the existing line 38 (`from zndraw_auth.schemas import ...`).
 Add to `__all__` list:
 
 ```python
-    # Routers
-    "cli_login_router",
-    "admin_token_router",
-    # CLI Login Schemas
-    "CLILoginCreateResponse",
-    "CLILoginStatusResponse",
-    "ImpersonationTokenResponse",
+# Routers
+("cli_login_router",)
+("admin_token_router",)
+# CLI Login Schemas
+("CLILoginCreateResponse",)
+("CLILoginStatusResponse",)
+("ImpersonationTokenResponse",)
 ```
 
 Also export `CLILoginChallenge` from db:
