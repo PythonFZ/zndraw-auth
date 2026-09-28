@@ -85,6 +85,7 @@ database_lifespan(app)
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool, NullPool
 
+
 def create_engine_for_url(database_url: str) -> AsyncEngine:
     """Create engine with appropriate connection pooling.
 
@@ -113,6 +114,7 @@ def create_engine_for_url(database_url: str) -> AsyncEngine:
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from fastapi import FastAPI
+
 
 @asynccontextmanager
 async def database_lifespan(
@@ -146,6 +148,7 @@ from typing import Annotated, AsyncIterator
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+
 def get_engine(request: Request) -> AsyncEngine:
     """Retrieve engine from app.state.
 
@@ -155,7 +158,7 @@ def get_engine(request: Request) -> AsyncEngine:
 
 
 def get_session_maker(
-    engine: Annotated[AsyncEngine, Depends(get_engine)]
+    engine: Annotated[AsyncEngine, Depends(get_engine)],
 ) -> async_sessionmaker[AsyncSession]:
     """Create session maker from engine.
 
@@ -170,7 +173,9 @@ def get_session_maker(
 
 
 async def get_session(
-    session_maker: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_maker)]
+    session_maker: Annotated[
+        async_sessionmaker[AsyncSession], Depends(get_session_maker)
+    ],
 ) -> AsyncIterator[AsyncSession]:
     """Yield request-scoped session.
 
@@ -222,7 +227,9 @@ async def ensure_default_admin(settings: AuthSettings) -> None:
         if existing is None:
             # Create admin user
             password_helper = PasswordHelper()
-            hashed = password_helper.hash(settings.default_admin_password.get_secret_value())
+            hashed = password_helper.hash(
+                settings.default_admin_password.get_secret_value()
+            )
             admin = User(
                 email=settings.default_admin_email,
                 hashed_password=hashed,
@@ -275,11 +282,13 @@ from zndraw_auth import AuthSettings, get_auth_settings
 ```python
 from zndraw_auth import database_lifespan
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with database_lifespan(app):
         # Host app initializes tables here
         yield
+
 
 app = FastAPI(lifespan=lifespan)
 ```
@@ -288,6 +297,7 @@ app = FastAPI(lifespan=lifespan)
 
 ```python
 from zndraw_auth.db import get_session, SessionDep
+
 
 @router.post("/jobs")
 async def create_job(session: SessionDep):
@@ -301,6 +311,7 @@ async def create_job(session: SessionDep):
 
 ```python
 from zndraw_auth.db import get_session_maker
+
 
 @pytest.fixture
 def app():
