@@ -134,6 +134,7 @@ class AuthSettings(BaseSettings):
 
 from functools import lru_cache
 
+
 @lru_cache
 def get_auth_settings() -> AuthSettings:
     return AuthSettings()
@@ -368,8 +369,12 @@ async def get_user_manager(
 ) -> UserManager:
     """FastAPI dependency that yields the user manager."""
     manager = UserManager(user_db)
-    manager.reset_password_token_secret = settings.reset_password_token_secret.get_secret_value()
-    manager.verification_token_secret = settings.verification_token_secret.get_secret_value()
+    manager.reset_password_token_secret = (
+        settings.reset_password_token_secret.get_secret_value()
+    )
+    manager.verification_token_secret = (
+        settings.verification_token_secret.get_secret_value()
+    )
     yield manager
 
 
@@ -608,6 +613,7 @@ async def app(test_settings: AuthSettings) -> FastAPI:
     # Clear lru_cache to ensure fresh engine/session for next test
     get_engine.cache_clear()
     from zndraw_auth.db import get_session_maker
+
     get_session_maker.cache_clear()
 
 
@@ -744,23 +750,19 @@ Other packages import like this:
 ```python
 from zndraw_auth import (
     # For Depends() in routes
-    current_active_user,    # Active authenticated user
-    current_superuser,      # Superuser only
+    current_active_user,  # Active authenticated user
+    current_superuser,  # Superuser only
     current_optional_user,  # User | None
-    get_async_session,      # Database session
-
+    get_async_session,  # Database session
     # For type hints
-    User,                   # User model
-
+    User,  # User model
     # For including auth routers
-    fastapi_users,          # FastAPIUsers instance
-    auth_backend,           # JWT backend
-
+    fastapi_users,  # FastAPIUsers instance
+    auth_backend,  # JWT backend
     # For schemas
     UserRead,
     UserCreate,
     UserUpdate,
-
     # For app setup
     create_db_and_tables,
 )
