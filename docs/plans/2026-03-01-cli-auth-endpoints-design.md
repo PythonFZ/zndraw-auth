@@ -42,13 +42,13 @@ tests/
 ```python
 class CLILoginChallenge(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(index=True, unique=True)       # 8-char alphanumeric
-    secret: str | None = None                         # random, only CLI knows; nulled on redeem
-    status: str = "pending"                           # pending | approved | redeemed
-    token: str | None = None                          # minted JWT; nulled on redeem
+    code: str = Field(index=True, unique=True)  # 8-char alphanumeric
+    secret: str | None = None  # random, only CLI knows; nulled on redeem
+    status: str = "pending"  # pending | approved | redeemed
+    token: str | None = None  # minted JWT; nulled on redeem
     user_id: uuid.UUID | None = Field(default=None, foreign_key="user.id")
     created_at: datetime
-    expires_at: datetime                              # created_at + 5 min
+    expires_at: datetime  # created_at + 5 min
 ```
 
 Uses SQLModel with `table=True` (shares `SQLModel.metadata` = `Base.metadata`).
@@ -137,9 +137,11 @@ class CLILoginCreateResponse(BaseModel):
     secret: str
     approve_url: str
 
+
 class CLILoginStatusResponse(BaseModel):
     status: str  # "pending" | "approved"
     token: str | None = None
+
 
 class ImpersonationTokenResponse(BaseModel):
     access_token: str
